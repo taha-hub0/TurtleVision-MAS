@@ -1,0 +1,38 @@
+{
+    "name": "turtle-id-coordinator",
+    "version": "1.0.0",
+    "description": "Turtle-ID Multi-Agent System - Coordinator Agent",
+    "main": "src/index.js",
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "nodemon src/index.js",
+        "test": "jest",
+        "lint": "eslint src/"
+    },
+    "keywords": [
+        "turtle",
+        "identification",
+        "multi-agent",
+        "mas"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "express": "^4.18.2",
+        "axios": "^1.4.0",
+        "mysql2": "^3.4.0",
+        "dotenv": "^16.0.3",
+        "body-parser": "^1.20.2",
+        "cors": "^2.8.5",
+        "multer": "^1.4.5-lts.1",
+        "uuid": "^9.0.0",
+        "winston": "^3.8.2",
+        "joi": "^17.9.2",
+        "pdfkit": "^0.13.0"
+    },
+    "devDependencies": {
+        "nodemon": "^2.0.22",
+        "jest": "^29.5.0",
+        "eslint": "^8.42.0"
+    }
+}

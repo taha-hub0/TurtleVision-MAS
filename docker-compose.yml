@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: turtle-id-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: turtle_id_db
+      MYSQL_USER: turtle_user
+      MYSQL_PASSWORD: turtle_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - turtle-network
+
+  coordinator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: turtle-coordinator
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      IMAGE_AGENT_URL: http://image-agent:5000
+      DB_AGENT_URL: http://db-agent:5001
+      DB_HOST: mysql
+      DB_USER: turtle_user
+      DB_PASSWORD: turtle_password
+      DB_NAME: turtle_id_db
+    depends_on:
+      - mysql
+    networks:
+      - turtle-network
+    restart: unless-stopped
+
+  image-agent:
+    build:
+      context: ./image-analysis-agent
+      dockerfile: Dockerfile
+    container_name: turtle-image-agent
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      DEBUG: 'False'
+      MODEL_PATH: ./src/models/weights/best_model.pt
+      CONFIDENCE_THRESHOLD: 0.85
+    volumes:
+      - ./image-analysis-agent:/app
+    networks:
+      - turtle-network
+    restart: unless-stopped
+
+  db-agent:
+    build:
+      context: ./database-agent
+      dockerfile: Dockerfile
+    container_name: turtle-db-agent
+    ports:
+      - "5001:5001"
+    environment:
+      PORT: 5001
+      DB_HOST: mysql
+      DB_USER: turtle_user
+      DB_PASSWORD: turtle_password
+      DB_NAME: turtle_id_db
+    depends_on:
+      - mysql
+    networks:
+      - turtle-network
+    restart: unless-stopped
+
+networks:
+  turtle-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
