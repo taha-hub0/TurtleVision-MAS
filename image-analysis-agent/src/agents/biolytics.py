@@ -1,19 +1,19 @@
-/**
- * Biolytics Agent - Görüntü Analiz Ajanı
- * Strategy Pattern ile Tür Tanımlama
- * 
- * Sorumluluğu: Deniz kaplumbağalarını fotoğraflarından tanımla
- * - Yeşil Kaplumbağa (Green Turtle): Post-ocular scutes analizi
- * - Deri Sırtlı (Leatherback): Pineal spot analizi
- * - Andere türler için genişletilebilir
- * 
- * SOLID Prensipleri:
- * - S: Her strateji tek sorumluluğa sahip
- * - O: Yeni türler eklenebilir (Open/Closed)
- * - L: Tüm stratejiler interface'i implement eder
- * - I: İnce arayüzler (Interface Segregation)
- * - D: Soyut stratejilere bağımlılık
- */
+"""
+Biolytics Agent - Görüntü Analiz Ajanı
+Strategy Pattern ile Tür Tanımlama
+
+Sorumluluğu: Deniz kaplumbağalarını fotoğraflarından tanımla
+- Yeşil Kaplumbağa (Green Turtle): Post-ocular scutes analizi
+- Deri Sırtlı (Leatherback): Pineal spot analizi
+- Andere türler için genişletilebilir
+
+SOLID Prensipleri:
+- S: Her strateji tek sorumluluğa sahip
+- O: Yeni türler eklenebilir (Open/Closed)
+- L: Tüm stratejiler interface'i implement eder
+- I: İnce arayüzler (Interface Segregation)
+- D: Soyut stratejilere bağımlılık
+"""
 
 from abc import ABC, abstractmethod
 import cv2

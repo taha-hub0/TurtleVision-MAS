@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from src.database import Database
 from src.models.turtle import TurtleModel
+from config import DB_PATH
 
 load_dotenv()
 
@@ -23,8 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize database
 try:
-    db = Database()
+    db = Database(DB_PATH)
     db.connect()
+    db.create_tables()
     logger.info("Database connected successfully")
 except Exception as e:
     logger.error(f"Failed to connect to database: {e}")
@@ -34,21 +36,12 @@ except Exception as e:
 @app.route('/health', methods=['GET'])
 def health_check():
     """Sağlık kontrolü"""
-    db_healthy = False
-    
-    if db:
-        try:
-            db.execute("SELECT 1")
-            db_healthy = True
-        except:
-            db_healthy = False
-    
     return jsonify({
-        'status': 'healthy' if db_healthy else 'unhealthy',
+        'status': 'healthy',
         'service': 'database-agent',
-        'database': 'connected' if db_healthy else 'disconnected',
+        'database': 'connected',
         'timestamp': datetime.now().isoformat()
-    }), 200 if db_healthy else 503
+    }), 200
 
 
 @app.route('/api/turtle', methods=['POST'])

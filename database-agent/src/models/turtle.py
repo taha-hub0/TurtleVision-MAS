@@ -22,11 +22,11 @@ class TurtleModel:
         """Kaplumbağayı veritabanına kaydet"""
         try:
             query = """
-            INSERT INTO turtles 
+            INSERT INTO turtles
             (id, image_base64, analysis_result, metadata, species, location, registered_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """
-            
+
             params = [
                 self.id,
                 self.image_base64,

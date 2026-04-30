@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐢 Turtle-ID Test UI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .status.healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.unhealthy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .response {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+
+        .input-group {
+            margin: 10px 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐢 Turtle-ID Multi-Agent System</h1>
+            <p>Test Kontrol Paneli</p>
+        </div>
+
+        <div class="grid">
+            <!-- System Health -->
+            <div class="card">
+                <h2>📊 Sistem Durumu</h2>
+                <div id="health-status" class="status loading">Kontrol ediliyor...</div>
+                <button onclick="checkHealth()">Sistem Durumunu Kontrol Et</button>
+                <div id="health-response" class="response"></div>
+            </div>
+
+            <!-- Image Analysis -->
+            <div class="card">
+                <h2>🔍 Görüntü Analizi</h2>
+                <div class="input-group">
+                    <label>Test Görüntüsü URL'i (Opsiyonel):</label>
+                    <input type="text" id="image-url" placeholder="https://example.com/turtle.jpg">
+                </div>
+                <button onclick="testImageAnalysis()">Görüntü Analizi Test Et</button>
+                <div id="image-response" class="response"></div>
+            </div>
+
+            <!-- Validation Test -->
+            <div class="card">
+                <h2>✅ Doğrulama (Gatekeeper)</h2>
+                <div class="input-group">
+                    <label>Konum Enlemi:</label>
+                    <input type="number" id="lat" placeholder="36.7138" step="0.001">
+                </div>
+                <div class="input-group">
+                    <label>Konum Boylamı:</label>
+                    <input type="number" id="lon" placeholder="31.2327" step="0.001">
+                </div>
+                <div class="input-group">
+                    <label>Gözlemci Adı:</label>
+                    <input type="text" id="observer" placeholder="Dr. John Doe">
+                </div>
+                <button onclick="testValidation()">Doğrulama Test Et</button>
+                <div id="validation-response" class="response"></div>
+            </div>
+
+            <!-- Backend Health -->
+            <div class="card">
+                <h2>🖥️ Backend Agent (Node.js)</h2>
+                <div id="backend-status" class="status loading">Kontrol ediliyor...</div>
+                <button onclick="checkBackend()">Backend Kontrol Et</button>
+                <div id="backend-response" class="response"></div>
+            </div>
+
+            <!-- Image Agent Health -->
+            <div class="card">
+                <h2>🐍 Image Analysis Agent (Python)</h2>
+                <div id="image-agent-status" class="status loading">Kontrol ediliyor...</div>
+                <button onclick="checkImageAgent()">Image Agent Kontrol Et</button>
+                <div id="image-agent-response" class="response"></div>
+            </div>
+
+            <!-- API Endpoints -->
+            <div class="card">
+                <h2>📡 API Endpoints</h2>
+                <textarea readonly>Backend (Port 3000):
+  GET http://localhost:3000/api/health
+
+Image Analysis (Port 5000):
+  GET http://localhost:5000/health
+
+Matching:
+  POST http://localhost:3000/api/matching/find
+
+Reporting:
+  POST http://localhost:3000/api/reporting/generate
+
+Validation:
+  POST http://localhost:3000/api/validation/validate</textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function makeRequest(url, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (data) options.body = JSON.stringify(data);
+
+                const response = await fetch(url, options);
+                const result = await response.json();
+                return { success: true, data: result, status: response.status };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function checkHealth() {
+            const status = document.getElementById('health-status');
+            const response = document.getElementById('health-response');
+            status.className = 'status loading';
+            status.textContent = 'Kontrol ediliyor...';
+
+            const result = await makeRequest('http://localhost:3000/api/health');
+
+            if (result.success) {
+                const data = result.data;
+                status.className = `status ${data.allAgentsHealthy ? 'healthy' : 'unhealthy'}`;
+                status.textContent = `Status: ${data.coordinator} | Backend: ${data.coordinator} | Image: ${data.imageAnalysisAgent}`;
+                response.textContent = JSON.stringify(data, null, 2);
+            } else {
+                status.className = 'status unhealthy';
+                status.textContent = `Bağlanamadı: ${result.error}`;
+                response.textContent = result.error;
+            }
+        }
+
+        async function checkBackend() {
+            const status = document.getElementById('backend-status');
+            const response = document.getElementById('backend-response');
+            status.className = 'status loading';
+            status.textContent = 'Kontrol ediliyor...';
+
+            const result = await makeRequest('http://localhost:3000/api/health');
+
+            if (result.success && result.status === 200) {
+                status.className = 'status healthy';
+                status.textContent = 'Backend ✓ ÇALIŞIYOR';
+                response.textContent = JSON.stringify(result.data, null, 2);
+            } else {
+                status.className = 'status unhealthy';
+                status.textContent = 'Backend ✗ ÇALIŞMIYOR';
+                response.textContent = result.error || 'Bağlantı başarısız';
+            }
+        }
+
+        async function checkImageAgent() {
+            const status = document.getElementById('image-agent-status');
+            const response = document.getElementById('image-agent-response');
+            status.className = 'status loading';
+            status.textContent = 'Kontrol ediliyor...';
+
+            const result = await makeRequest('http://localhost:5000/health');
+
+            if (result.success && result.status === 200) {
+                status.className = 'status healthy';
+                status.textContent = 'Image Agent ✓ ÇALIŞIYOR';
+                response.textContent = JSON.stringify(result.data, null, 2);
+            } else {
+                status.className = 'status unhealthy';
+                status.textContent = 'Image Agent ✗ ÇALIŞMIYOR';
+                response.textContent = result.error || 'Bağlantı başarısız';
+            }
+        }
+
+        async function testValidation() {
+            const response = document.getElementById('validation-response');
+            const lat = document.getElementById('lat').value || 36.7138;
+            const lon = document.getElementById('lon').value || 31.2327;
+            const observer = document.getElementById('observer').value || 'Test Observer';
+
+            const data = {
+                imageBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+                timestamp: new Date().toISOString(),
+                location: { latitude: parseFloat(lat), longitude: parseFloat(lon), accuracy: 10 },
+                observer: { name: observer, email: 'test@example.com' }
+            };
+
+            const result = await makeRequest('http://localhost:3000/api/validation/validate', 'POST', data);
+            response.textContent = result.success
+                ? JSON.stringify(result.data, null, 2)
+                : `Hata: ${result.error}`;
+        }
+
+        async function testImageAnalysis() {
+            const response = document.getElementById('image-response');
+            response.textContent = 'Analiz yapılıyor...';
+
+            const data = {
+                image: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+                metadata: { location: 'Test Beach' }
+            };
+
+            const result = await makeRequest('http://localhost:5000/api/analyze', 'POST', data);
+            response.textContent = result.success
+                ? JSON.stringify(result.data, null, 2)
+                : `Hata: ${result.error}`;
+        }
+
+        // Başlangıçta sistem durumunu kontrol et
+        window.addEventListener('load', () => {
+            checkHealth();
+            checkBackend();
+            checkImageAgent();
+        });
+    </script>
+</body>
+
+</html>

@@ -7,16 +7,8 @@ load_dotenv()
 PORT = int(os.getenv('PORT', 5001))
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-# Database Configuration
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = int(os.getenv('DB_PORT', 3306))
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-DB_NAME = os.getenv('DB_NAME', 'turtle_id_db')
-
-# Connection Pool
-DB_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', 10))
-DB_MAX_OVERFLOW = int(os.getenv('DB_MAX_OVERFLOW', 20))
+# SQLite Configuration
+DB_PATH = os.getenv('DB_PATH', './turtle_id.db')
 
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
