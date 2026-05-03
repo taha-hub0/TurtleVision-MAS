@@ -1,86 +1,63 @@
-# Turtle-ID Multi-Agent System (MAS)
+# 🐢 TurtleVision: Deep Learning Based Multi-Agent System (MAS)
 
-Deniz kaplumbağalarını fotoğraflarından tanımlamak için geliştirilmiş bir Multi-Agent System mimarisi.
+Deniz kaplumbağalarını yüz/kabuk desenlerinden (biyometrik) otonom olarak tanımlamak için geliştirilmiş, Derin Öğrenme tabanlı çok etmenli bir sistem mimarisidir. 
 
-## Sistem Mimarisi
+Bu sistem, geleneksel markalama yöntemlerine zarar vermeyen (Non-Invasive) bir alternatif sunarak araştırmacıların popülasyon takibi yapmasını sağlar.
 
-```
-┌─────────────────────────────────────────────────────┐
-│              Client Application                      │
-└────────────┬────────────────────────────────────────┘
-             │
-     ┌───────▼───────┐
-     │ Coordinator   │
-     │ Agent         │
-     │ (Express.js)  │
-     └───┬───────┬───┘
-         │       │
-    ┌────▼───┐   │
-    │ Image  │   │
-    │Analysis│   │
-    │Agent   │   │
-    │(Python)│   │
-    └────┬───┘   │
-         │       │
-    ┌────▼──────▼┐
-    │ Database   │
-    │ Agent      │
-    │ (MySQL)    │
-    └────────────┘
+## 🌟 Öne Çıkan Özellikler
+
+- **AI Biometric Identification**: ResNet50 modelini kullanarak kaplumbağa yüz desenlerinden 128 boyutlu benzersiz vektörler (parmak izi) çıkarır.
+- **Multi-Agent Architecture**: Görüntü analizi, veritabanı yönetimi ve kullanıcı arayüzü katmanları bağımsız ajanlar gibi koordine edilir.
+- **Smart Image Cropping**: Görüntü işleme öncesi Instagram tarzı "Focus Crop" ile yapay zeka doğruluğu maksimize edilir.
+- **Interactive Dashboard & Gallery**: Canlı istatistikler, tür dağılım grafikleri ve fiziksel görsel arşivi.
+- **Location Tracking**: Tespit edilen bireylerin plaj bazlı (Kaş, İztuzu, Patara vb.) konum geçmişi.
+
+## 🏗️ Sistem Mimarisi
+
+```mermaid
+graph TD
+    A[Kullanıcı Arayüzü - React Agent] -- "Base64 Image Data" --> B[Görüntü Analiz Agent - Python/Flask]
+    B -- "Feature Extraction (ResNet50)" --> C[Matching Engine]
+    C -- "Vector Search" --> D[(Biyometrik Veritabanı - JSON/NoSQL)]
+    D -- "Match Found / New ID" --> B
+    B -- "JSON Response" --> A
 ```
 
-## Teknoloji Yığını
+## 🛠️ Teknoloji Yığını
 
-- **Backend/Orkestra**: Node.js + Express.js
-- **Görüntü Analiz**: Python + OpenCV + TensorFlow/PyTorch
-- **Veritabanı**: MySQL
-- **Agent İletişimi**: REST API / WebSockets
+- **Frontend**: React 18, Vite, Tailwind CSS, Lucide Icons, React-Image-Crop
+- **Backend (AI Engine)**: Python 3.x, Flask, OpenCV, TensorFlow/Keras (ResNet50)
+- **Database Management**: JSON-based NoSQL persistence (Kaggle dataset integrated)
+- **Design Strategy**: Glassmorphism (Sea-themed UI)
 
-## Proje Yapısı
+## 📁 Proje Yapısı
 
 ```
 turtle-id-mas/
-├── backend/                  # Node.js Koordinatör Agent
+├── frontend/                 # UI Agent (React + Vite)
 │   ├── src/
-│   │   ├── agents/          # Agent yönetimi
-│   │   ├── routes/          # API endpointleri
-│   │   ├── services/        # İş mantığı
-│   │   └── middleware/      # Express middleware
-│   ├── package.json
-│   └── .env
+│   │   ├── pages/           # Dashboard, Analiz, Galeri
+│   │   ├── components/      # Processing UI, Charts
+│   │   └── layouts/         # Okyanus temalı ana şablon
+│   └── package.json
 │
-├── image-analysis-agent/    # Python Görüntü Analiz Agent
+├── image-analysis-agent/    # AI Backend Agent (Python Flask)
 │   ├── src/
-│   │   ├── models/          # ML modelleri
-│   │   ├── processing/      # Görüntü işleme
-│   │   └── services/        # İş mantığı
-│   ├── requirements.txt
-│   └── config.py
+│   │   ├── models/          # ResNet50 Feature Extractor
+│   │   ├── processing/      # Image Preprocessor
+│   │   └── matching/        # Cosine Similarity Matcher
+│   ├── data/
+│   │   ├── gallery/         # Fiziksel fotoğraf arşivi
+│   │   └── kaggle_db.json   # Vektörel biyometrik veritabanı
+│   ├── app.py               # Flask API
+│   └── requirements.txt
 │
-├── database-agent/          # Veritabanı Agent
-│   ├── src/
-│   │   ├── models/          # Veritabanı modelleri
-│   │   ├── queries/         # SQL sorguları
-│   │   └── services/        # DB servisleri
-│   ├── migrations/          # Database migrations
-│   └── config.py
-│
-└── docs/                    # Dokümantasyon
-    ├── architecture.md
-    ├── api-spec.md
-    └── setup-guide.md
+└── baslat.bat                # Tek tıkla sistemi başlatma betiği
 ```
 
-## Kurulum
+## 🚀 Hızlı Kurulum
 
-### 1. Backend Setup (Node.js)
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-### 2. Python Agents Setup
+### 1. Yapay Zeka Backend (Python)
 ```bash
 cd image-analysis-agent
 python -m venv venv
@@ -89,20 +66,19 @@ pip install -r requirements.txt
 python app.py
 ```
 
-### 3. Veritabanı Kurulumu
+### 2. Kullanıcı Arayüzü (React)
 ```bash
-cd database-agent
-pip install -r requirements.txt
-python migrate.py
+cd frontend
+npm install
+npm run dev
 ```
 
-## API Endpoints
+## 🧪 Test Senaryosu (Hoca Sunumu İçin)
+1. Sisteme giriş yapın (Login).
+2. "Yeni Analiz" kısmından bir kaplumbağa fotoğrafı yükleyin.
+3. Yüzünü kırpıp (Crop) analiz edin; sistem "Yeni Birey" (Kırmızı) diyecektir.
+4. "Veritabanına Kaydet" diyerek kaplumbağayı sisteme tanıtın.
+5. Aynı fotoğrafı (veya 2 yıl sonraki halini) tekrar atın; sistem artık %100 doğrulukla (Yeşil) tanıyacaktır!
 
-- `POST /api/turtle/identify` - Kaplumbağa tanımlama
-- `GET /api/turtle/:id` - Kaplumbağa bilgisi
-- `POST /api/turtle/register` - Yeni kaplumbağa kaydı
-- `GET /api/health` - Sistem durumu kontrolü
-
-## Lisans
-
-MIT
+## 📜 Lisans
+Bu proje akademik amaçlarla geliştirilmiş olup MIT lisansı altındadır.
