@@ -1,4 +1,50 @@
-image-analysis-agent/venv/
+# Dependencies
 node_modules/
+venv/
 .env
+.venv
+env/
+ENV/
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# React/Vite
+dist/
+dist-ssr/
+*.local
+.eslintcache
+.stylelintcache
+.prettiercache
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Data (Optional: Keep it if you want the demo data on GitHub, 
+# but usually it's better to ignore the actual saved images)
+image-analysis-agent/data/gallery/*.jpg
+image-analysis-agent/data/gallery/*.png
+!image-analysis-agent/data/gallery/.gitkeep

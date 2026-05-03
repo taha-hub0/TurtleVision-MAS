@@ -146,11 +146,11 @@ const ProcessingState: React.FC<ProcessingStateProps> = ({
             <div
               className={cn(
                 'px-4 py-2 rounded-full font-bold text-lg',
-                similarityScore >= 0.9
+                similarityScore >= 0.6
                   ? 'bg-green-500 text-white'
-                  : similarityScore >= 0.7
+                  : similarityScore >= 0.5
                     ? 'bg-yellow-500 text-white'
-                    : 'bg-orange-500 text-white'
+                    : 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]'
               )}
             >
               {(similarityScore * 100).toFixed(1)}%
@@ -161,23 +161,25 @@ const ProcessingState: React.FC<ProcessingStateProps> = ({
             <div
               className={cn(
                 'h-full transition-all duration-500 ease-out',
-                similarityScore >= 0.9
+                similarityScore >= 0.6
                   ? 'bg-gradient-to-r from-green-400 to-green-600'
-                  : similarityScore >= 0.7
+                  : similarityScore >= 0.5
                     ? 'bg-gradient-to-r from-yellow-400 to-yellow-600'
-                    : 'bg-gradient-to-r from-orange-400 to-orange-600'
+                    : 'bg-gradient-to-r from-red-400 to-red-600'
               )}
               style={{ width: `${similarityScore * 100}%` }}
             />
           </div>
 
-          <p className="text-sm text-slate-700 mt-4">
-            {similarityScore >= 0.9
-              ? '✓ Bu bireyin daha önce görüldüğü tespit edilmiştir.'
-              : similarityScore >= 0.7
-                ? '⚠ Potansiyel eşleşme bulundu, manuel doğrulama önerilir.'
-                : '● Yeni bir bireydir, veritabanında kayıtlı değildir.'}
-          </p>
+          <div className="text-sm mt-4">
+            {similarityScore >= 0.6
+              ? <p className="text-green-700 font-medium">✓ Eşleşme bulundu. Bu birey veritabanında başarıyla tespit edildi.</p>
+              : similarityScore >= 0.5
+                ? <p className="text-yellow-700 font-medium">⚠ Çok düşük ihtimalli potansiyel eşleşme, emin değiliz.</p>
+                : <p className="text-red-600 font-bold bg-red-50 p-3 rounded-lg border border-red-200">
+                    ❌ Eşleşme BULUNAMADI! Bu yepyeni bir birey. Lütfen aşağıdaki "Veritabanına Kaydet" butonuna basarak bu yeni kaplumbağayı sisteme tanıtın.
+                  </p>}
+          </div>
         </div>
       )}
 

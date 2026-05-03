@@ -1,5 +1,5 @@
 import React from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Turtle } from 'lucide-react'
 
 const Header: React.FC = () => {
@@ -30,6 +30,8 @@ const Sidebar: React.FC = () => {
   const navItems = [
     { path: '/dashboard', label: '📊 Dashboard' },
     { path: '/identification', label: '🔍 Yeni Analiz' },
+    { path: '/gallery', label: '📷 Galeri & Veritabanı' },
+    { path: '/turtle/turtle-001', label: '🐢 Kaplumbağa Profilleri' },
   ]
 
   return (
@@ -40,11 +42,10 @@ const Sidebar: React.FC = () => {
             <a
               key={item.path}
               href={item.path}
-              className={`block px-4 py-2.5 rounded-lg font-medium transition-all ${
-                isActive(item.path)
-                  ? 'bg-teal-50 text-teal-600 shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`block px-4 py-2.5 rounded-lg font-medium transition-all ${isActive(item.path)
+                ? 'bg-teal-50 text-teal-600 shadow-sm'
+                : 'text-slate-700 hover:bg-slate-50'
+                }`}
             >
               {item.label}
             </a>
@@ -74,6 +75,21 @@ const Sidebar: React.FC = () => {
           <p className="text-xs text-slate-600 leading-relaxed">
             <strong>Non-Invasive</strong> deniz kaplumbağası tanımlama sistemi. Zararsız, hızlı ve güvenilir.
           </p>
+        </div>
+
+        <div className="border-t border-slate-200 pt-6 mt-6">
+          <button
+            onClick={() => {
+              localStorage.removeItem('isAuthenticated')
+              window.location.href = '/login'
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg font-medium transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sistemden Çıkış Yap
+          </button>
         </div>
       </div>
     </aside>
