@@ -30,7 +30,7 @@ graph TD
 - **Backend (AI Engine)**: Python 3.x, Flask, OpenCV, PyTorch (ResNet50)
 - **Veritabanı**: JSON tabanlı NoSQL kalıcılığı (Kaggle veri seti entegreli)
 
-## 🧪 Test Senaryosu (Hoca Sunumu İçin)
+## 🧪 Test Senaryosu
 
 1.  **Sisteme Giriş:** `Login` ekranından güvenli giriş yapın.
 2.  **Toplu İçe Aktarma:** Masaüstündeki `images` klasörünü `import_images.py` ile sisteme tanıtın.
