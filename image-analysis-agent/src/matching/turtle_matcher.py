@@ -61,28 +61,24 @@ def calculate_cosine_similarity(vector1: np.ndarray, vector2: np.ndarray) -> flo
     Cosine Similarity Hesapla.
     """
     norm1 = np.linalg.norm(vector1)
-    norm2 = np.linalg.norm(vector2)
-    
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-    
-    dot_product = np.dot(vector1, vector2)
-    cosine_sim = dot_product / (norm1 * norm2)
-    
-    # Cosine similarity -1 ile 1 arasındadır.
-    # Yüzdelik dilim (0-1 arası) göstermek için (x + 1) / 2 yapıyoruz.
-    mapped_sim = (cosine_sim + 1.0) / 2.0
-    
-    return float(np.clip(mapped_sim, 0.0, 1.0))
-
-
-def calculate_euclidean_distance(vector1: np.ndarray, vector2: np.ndarray) -> float:
-    """
-    Euclidean Distance Hesapla.
-    """
-    distance = np.linalg.norm(np.array(vector1) - np.array(vector2))
-    similarity = 1.0 / (1.0 + distance)
-    return float(similarity)
+class SimilarityStrategy:
+    """SOLID - Strategy Pattern: Benzerlik hesaplama algoritmaları."""
+    @staticmethod
+    def calculate(v1, v2, method='cosine'):
+        v1, v2 = np.array(v1), np.array(v2)
+        if method == 'cosine':
+            dot_product = np.dot(v1, v2)
+            norm_a = np.linalg.norm(v1)
+            norm_b = np.linalg.norm(v2)
+            if norm_a == 0 or norm_b == 0: return 0.0
+            
+            # -1 ile 1 arası sonucu 0 ile 1 arasına (%0 - %100) çekiyoruz
+            cosine_sim = dot_product / (norm_a * norm_b)
+            mapped_sim = (cosine_sim + 1.0) / 2.0
+            return float(np.clip(mapped_sim, 0.0, 1.0))
+        else: # Euclidean
+            dist = np.linalg.norm(v1 - v2)
+            return float(1 / (1 + dist))
 
 
 class KaggleDBWrapper:
@@ -120,22 +116,14 @@ class KaggleDBWrapper:
 
 class TurtleMatcher:
     """
-    Kaplumbağa eşleştirme ajanı.
-    
-    Gelen biyometrik vektörü (yüklenen fotoğraftan) veritabanındaki
-    tüm kayıtlarla karşılaştırır ve %60 eşiğine göre sınıflandırır.
+    Ana Eşleştirme Ajanı (Matching Agent).
+    SOLID - Single Responsibility: Sadece biyometrik karşılaştırma ve karar verme süreçlerini yönetir.
     """
     
-    def __init__(self, threshold: float = SIMILARITY_THRESHOLD, method: str = 'cosine'):
-        """
-        Matcher'ı başlat.
-        
-        Args:
-            threshold: Benzerlik eşiği (0-1 arası, default 0.60 = %60)
-            method: 'cosine' veya 'euclidean'
-        """
+    def __init__(self, threshold: float = SIMILARITY_THRESHOLD, strategy: str = 'cosine'):
         self.threshold = threshold
-        self.method = method
+        self.strategy = strategy
+        self.engine = SimilarityStrategy()
         
         # Eğer Kaggle veritabanı (json) mevcutsa onu kullan, yoksa mock_db'ye düş
         kaggle_db_path = os.path.join(Path(__file__).parent.parent.parent, "data", "kaggle_seaturtle", "kaggle_db.json")
@@ -144,12 +132,13 @@ class TurtleMatcher:
                 with open(kaggle_db_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self.db = KaggleDBWrapper(data)
-                logger.info(f"Loaded REAL Kaggle dataset with {len(data)} records for matching.")
+                # 2. YEREL MOD (Sadece İçe Aktarılan Verilerle Çalışır)
+                logger.info(f"Offline Mode: Loaded {len(data)} records from local database.")
             else:
                 self.db = get_mock_database()
                 logger.info("Kaggle database not found. Falling back to MOCK database.")
         except Exception as e:
-            logger.error(f"Error loading database: {e}")
+            logger.error(f"Error initializing Matcher: {e}")
             self.db = get_mock_database()
 
     
@@ -186,10 +175,8 @@ class TurtleMatcher:
         for turtle in all_turtles:
             db_vector = np.array(turtle['biometric_vector'])
             
-            if self.method == 'cosine':
-                sim = calculate_cosine_similarity(incoming_vector, db_vector)
-            else:  # euclidean
-                sim = calculate_euclidean_distance(incoming_vector, db_vector)
+            # Benzerlik hesapla (Strategy Pattern)
+            sim = self.engine.calculate(incoming_vector, db_vector, self.strategy)
             
             similarities.append({
                 'turtle_id': turtle['turtle_id'],
@@ -210,7 +197,7 @@ class TurtleMatcher:
                 confidence=best_match['similarity'],
                 matched_turtle_id=best_match['turtle_id'],
                 similarity_score=best_match['similarity'],
-                matching_method=self.method,
+                matching_method=self.strategy,
                 reasoning=(
                     f"Benzerlik {best_match['similarity']*100:.1f}% (eşik: %{self.threshold*100}). "
                     f"{best_match['turtle_id']} ({best_match['species']}) ile eşleşti. "
@@ -225,7 +212,7 @@ class TurtleMatcher:
                 confidence=best_match['similarity'],
                 matched_turtle_id=None,
                 similarity_score=best_match['similarity'],
-                matching_method=self.method,
+                matching_method=self.strategy,
                 reasoning=(
                     f"Benzerlik {best_match['similarity']*100:.1f}% (eşik: %{self.threshold*100} altında). "
                     f"En yakın kayıt: {best_match['turtle_id']} ({best_match['similarity']*100:.1f}%). "

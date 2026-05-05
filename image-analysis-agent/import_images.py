@@ -15,10 +15,19 @@ logger = logging.getLogger(__name__)
 
 def import_specific_folders():
     base_dir = r"C:\Users\lenovo\Desktop\images"
-    # Sadece t001 ile t011 arasındaki klasör adlarını seç
-    target_folders = ["t001", "t002", "t003", "t004", "t006", "t007", "t008", "t009", "t011"]
     
-    print("Yapay Zeka Modeli yükleniyor...")
+    # Otomatik olarak tüm alt klasörleri bul
+    if not os.path.exists(base_dir):
+        logger.error(f"Hata: {base_dir} yolu bulunamadı! Lütfen Masaüstünde 'images' klasörü olduğundan emin olun.")
+        return
+
+    target_folders = [f for f in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, f))]
+    
+    if not target_folders:
+        logger.warning("Klasör içinde alt klasör bulunamadı. Direkt ana dizindeki resimlere bakılıyor...")
+        target_folders = ["."] # Ana dizini de tara
+    
+    print(f"Yapay Zeka Modeli yükleniyor... ({len(target_folders)} klasör bulundu)")
     model = TurtleIdentificationModel()
     processor = ImageProcessor()
     
@@ -49,8 +58,9 @@ def import_specific_folders():
                 with open(img_path, "rb") as f:
                     base64_data = base64.b64encode(f.read()).decode('utf-8')
                 
-                # Benzersiz bir ID oluştur (Örn: t001_01)
-                turtle_id = f"{folder}_{idx+1:02d}"
+                # Benzersiz ve temiz bir ID oluştur
+                clean_folder = folder.replace(".", "main").replace(" ", "_")
+                turtle_id = f"{clean_folder}_{idx+1:02d}"
                 
                 # 3. API'ye gönder
                 payload = {

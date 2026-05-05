@@ -385,14 +385,20 @@ def match_turtle():
                 'request_id': request_id
             }), 400
 
-        # Eşleştirme yap
-        logger.info(f"[{request_id}] Matching turtle biometric vector...")
-        match_result = matcher.match(biometric_vector)
+        # Eşleştirme yap (Top 3 getir)
+        logger.info(f"[{request_id}] Matching turtle biometric vector (Top 3)...")
+        top_n_result = matcher.match_with_top_n(biometric_vector, top_n=3)
+        match_result = top_n_result['main_result']
         
-        logger.info(
-            f"[{request_id}] Match result: {match_result.classification} "
-            f"(confidence: {match_result.confidence*100:.1f}%)"
-        )
+        # Alternatifleri hazırla (Resim URL'leri ile birlikte)
+        alternatives = []
+        for alt in top_n_result['top_alternatives']:
+            alternatives.append({
+                'turtle_id': alt['turtle_id'],
+                'species': alt['species'],
+                'similarity': alt['similarity'],
+                'url': f"http://localhost:5000/api/gallery/{alt['turtle_id']}.jpg"
+            })
 
         return jsonify({
             'success': True,
@@ -402,6 +408,7 @@ def match_turtle():
             'confidence': match_result.confidence,
             'matched_turtle_id': match_result.matched_turtle_id,
             'similarity_score': match_result.similarity_score,
+            'top_alternatives': alternatives,
             'matching_method': match_result.matching_method,
             'reasoning': match_result.reasoning,
             'timestamp': datetime.now().isoformat()
@@ -487,10 +494,18 @@ def get_gallery():
     
     return jsonify({'success': True, 'images': images})
 
-@app.route('/api/gallery/<filename>', methods=['GET'])
+@app.route('/api/gallery/<path:filename>', methods=['GET'])
 def serve_gallery_image(filename):
     """Galerideki fiziksel bir resmi sunar"""
     gallery_dir = os.path.join(os.path.dirname(__file__), 'data', 'gallery')
+    try:
+        # Eğer uzantı yoksa varsayılan olarak .jpg ara
+        if '.' not in filename:
+            filename += '.jpg'
+        return send_from_directory(gallery_dir, filename)
+    except Exception as e:
+        logger.error(f"Görsel servis edilemedi ({filename}): {e}")
+        return "Görsel bulunamadı", 404
     return send_from_directory(gallery_dir, filename)
 
 @app.route('/api/gallery/<turtle_id>', methods=['DELETE'])
