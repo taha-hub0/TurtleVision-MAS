@@ -9,6 +9,7 @@ interface ProcessingStateProps {
   biometricCode?: string
   similarityScore?: number
   elapsedTime?: number
+  topAlternatives?: { turtle_id: string, similarity: number, url: string }[]
 }
 
 const StepIndicator: React.FC<{
@@ -58,6 +59,7 @@ const ProcessingState: React.FC<ProcessingStateProps> = ({
   biometricCode,
   similarityScore,
   elapsedTime,
+  topAlternatives,
 }) => {
   const [displayTime, setDisplayTime] = useState(elapsedTime || 0)
 
@@ -177,8 +179,43 @@ const ProcessingState: React.FC<ProcessingStateProps> = ({
               : similarityScore >= 0.5
                 ? <p className="text-yellow-700 font-medium">⚠ Çok düşük ihtimalli potansiyel eşleşme, emin değiliz.</p>
                 : <p className="text-red-600 font-bold bg-red-50 p-3 rounded-lg border border-red-200">
-                    ❌ Eşleşme BULUNAMADI! Bu yepyeni bir birey. Lütfen aşağıdaki "Veritabanına Kaydet" butonuna basarak bu yeni kaplumbağayı sisteme tanıtın.
-                  </p>}
+                  ❌ Eşleşme BULUNAMADI! Bu yepyeni bir birey. Lütfen aşağıdaki "Veritabanına Kaydet" butonuna basarak bu yeni kaplumbağayı sisteme tanıtın.
+                </p>}
+          </div>
+        </div>
+      )}
+
+      {/* Top 3 Similar Turtles Section */}
+      {topAlternatives && topAlternatives.length > 0 && !isProcessing && (
+        <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
+          <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
+            <span className="text-xl">🔍</span>
+            <h3 className="text-lg font-semibold text-slate-900">En Benzer 3 Kayıt (Veritabanı)</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {topAlternatives.map((alt, idx) => (
+              <div key={idx} className="border border-slate-100 rounded-lg p-3 bg-slate-50/50 hover:shadow-md transition-shadow">
+                <div className="aspect-square w-full mb-3 overflow-hidden rounded-md bg-slate-200">
+                  <img
+                    src={alt.url}
+                    alt={alt.turtle_id}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Resim+Yok';
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-xs font-mono">
+                  <span className="font-bold text-slate-700">{alt.turtle_id}</span>
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-white",
+                    alt.similarity >= 0.6 ? "bg-green-500" : alt.similarity >= 0.4 ? "bg-amber-500" : "bg-slate-400"
+                  )}>
+                    %{(alt.similarity * 100).toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
