@@ -56,16 +56,45 @@ class MatchResult:
     reasoning: str = ''  # İnsan tarafından okunabilir açıklama
 
 
-def calculate_cosine_similarity(vector1: np.ndarray, vector2: np.ndarray) -> float:
+def calculate_cosine_similarity(vector1, vector2) -> float:
     """
-    Cosine Similarity Hesapla.
+    Kosinus benzerligi. Sonuc SimilarityStrategy ile ayni olcekte doner:
+    [-1, 1] araligi [0, 1]'e haritalanir.
+
+    NOT: Bu fonksiyonun govdesi eksikti - norm1 hesaplaniyor ama `return`
+    yoktu, yani None donuyordu. match_with_top_n() bunu kullandigi icin
+    Top-N eslestirme, sonuclari siralarken None karsilastirmasindan
+    TypeError ile dusuyordu.
     """
-    norm1 = np.linalg.norm(vector1)
+    return SimilarityStrategy.calculate(vector1, vector2, method='cosine')
+
+
+def calculate_euclidean_distance(vector1, vector2) -> float:
+    """Oklid mesafesinden turetilmis benzerlik (1 / (1 + d)).
+
+    src/matching/__init__.py bu adi import etmeye calisiyordu ama fonksiyon
+    tanimli degildi; ImportError paketin tamaminin yuklenmesini engelliyordu.
+    app.py bu hatayi yakalayip `matcher = None` yaptigi icin SeaTurtleID
+    eslestirmesi uretimde sessizce devre disi kaliyordu.
+    """
+    return SimilarityStrategy.calculate(vector1, vector2, method='euclidean')
+
+
 class SimilarityStrategy:
     """SOLID - Strategy Pattern: Benzerlik hesaplama algoritmaları."""
     @staticmethod
     def calculate(v1, v2, method='cosine'):
-        v1, v2 = np.array(v1), np.array(v2)
+        v1, v2 = np.array(v1, dtype=np.float64), np.array(v2, dtype=np.float64)
+
+        # Farkli boyuttaki vektorler karsilastirilamaz. Bu, model degistiginde
+        # (or. egitilmis checkpoint devreye girdiginde) eski kayitlarin
+        # yeniden gomulmesi gerektiginin isaretidir; np.dot'un ValueError'i
+        # yerine acik bir 0 donuyoruz ki eslestirme cokmesin.
+        if v1.shape != v2.shape:
+            logger.warning('Gomu boyutu uyusmuyor: %s vs %s - kayitlar yeniden '
+                           'gomulmeli (bkz. reid/README.md)', v1.shape, v2.shape)
+            return 0.0
+
         if method == 'cosine':
             dot_product = np.dot(v1, v2)
             norm_a = np.linalg.norm(v1)
@@ -243,7 +272,9 @@ class TurtleMatcher:
         similarities = []
         for turtle in all_turtles:
             db_vector = np.array(turtle['biometric_vector'])
-            if self.method == 'cosine':
+            # self.method degil: yapici bu alani `self.strategy` olarak
+            # atiyor. Eski hali AttributeError uretiyordu.
+            if self.strategy == 'cosine':
                 sim = calculate_cosine_similarity(incoming_vector, db_vector)
             else:
                 sim = calculate_euclidean_distance(incoming_vector, db_vector)

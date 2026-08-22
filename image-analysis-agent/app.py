@@ -337,7 +337,10 @@ def biolytics_auto_detect():
 
 try:
     from src.matching.turtle_matcher import TurtleMatcher
-    matcher = TurtleMatcher(threshold=0.60, method='cosine')
+    # NOT: yapici parametrenin adi `strategy`, `method` degil. Yanlis ad
+    # TypeError uretiyor, o da asagidaki except tarafindan yutulup
+    # matcher=None birakiyordu - yani eslestirme sessizce kapaliydi.
+    matcher = TurtleMatcher(threshold=0.60, strategy='cosine')
     logger.info("Turtle Matcher initialized successfully (SeaTurtleID2022)")
 except Exception as e:
     logger.warning(f"Turtle Matcher not available: {e}")
