@@ -1,0 +1,7 @@
+# Offline re-ID arac zinciri (prepare_data / cache_crops / embed / train / evaluate)
+# Servislerden ayri tutulur: egitim bagimliliklari uretim imajlarina girmemeli.
+numpy==1.24.3
+pandas==2.0.3
+torch==2.0.1
+torchvision==0.15.2
+pillow==10.0.0

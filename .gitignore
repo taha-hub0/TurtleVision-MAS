@@ -48,3 +48,8 @@ dist-ssr/
 image-analysis-agent/data/gallery/*.jpg
 image-analysis-agent/data/gallery/*.png
 !image-analysis-agent/data/gallery/.gitkeep
+# reid/ uretilen varliklar (kirpma onbellegi, gomuler, checkpointler)
+reid/data/
+*.pt
+*.pth
+*.npz
