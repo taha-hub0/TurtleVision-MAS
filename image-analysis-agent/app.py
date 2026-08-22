@@ -330,6 +330,30 @@ def biolytics_auto_detect():
 
 
 # ============================================================================
+def expected_embedding_dim():
+    """Modelin gercekte urettigi gomu boyutu.
+
+    Bu deger 128 olarak sabit kodlanmisti; model degistiginde (or. egitilmis
+    checkpoint devreye girdiginde) istekler "must be a list of 128 numbers"
+    ile reddediliyordu. Artik modele soruluyor.
+    """
+    if model is not None and getattr(model, 'embedding_dim', None):
+        return int(model.embedding_dim)
+    return 2048
+
+
+def validate_biometric_vector(vector):
+    """Gecerliyse (True, None), degilse (False, hata_mesaji) dondur."""
+    if not isinstance(vector, list) or not vector:
+        return False, 'biometric_vector must be a non-empty list of numbers'
+    expected = expected_embedding_dim()
+    if len(vector) != expected:
+        return False, (f'biometric_vector must be a list of {expected} numbers '
+                       f'(gelen: {len(vector)}). Model degistiyse kayitli '
+                       f'vektorlerin yeniden gomulmesi gerekir.')
+    return True, None
+
+
 # SeaTurtleID2022 Matching Endpoints
 # ============================================================================
 # Matching Agent tarafından çağrılır. Gelen biyometrik vektörü
@@ -354,7 +378,7 @@ def match_turtle():
     
     Request JSON:
     {
-        "biometric_vector": [0.45, 0.23, ..., 0.78],  # 128 eleman
+        "biometric_vector": [0.45, 0.23, ..., 0.78],  # modelin gomu boyutu kadar
         "threshold": 0.60,  # Optional
         "method": "cosine",  # Optional: 'cosine' | 'euclidean'
         "metadata": {...}  # Optional: fotoğraf metadatası
@@ -381,10 +405,11 @@ def match_turtle():
 
         biometric_vector = data.get('biometric_vector')
         
-        if not isinstance(biometric_vector, list) or len(biometric_vector) != 128:
+        ok, hata = validate_biometric_vector(biometric_vector)
+        if not ok:
             return jsonify({
                 'success': False,
-                'error': 'biometric_vector must be a list of 128 numbers',
+                'error': hata,
                 'request_id': request_id
             }), 400
 
@@ -435,7 +460,8 @@ def register_turtle():
         biometric_vector = data.get('biometric_vector')
         turtle_id = data.get('turtle_id', f"TURTLE_{datetime.now().strftime('%H%M%S')}")
         
-        if not biometric_vector or len(biometric_vector) != 128:
+        ok, hata = validate_biometric_vector(biometric_vector)
+        if not ok:
             return jsonify({'success': False, 'error': 'Invalid biometric vector'}), 400
             
         record = {
@@ -564,10 +590,11 @@ def match_turtle_top_n():
         biometric_vector = data.get('biometric_vector')
         top_n = data.get('top_n', 5)
         
-        if not isinstance(biometric_vector, list) or len(biometric_vector) != 128:
+        ok, hata = validate_biometric_vector(biometric_vector)
+        if not ok:
             return jsonify({
                 'success': False,
-                'error': 'biometric_vector must be a list of 128 numbers'
+                'error': hata
             }), 400
 
         # Top N eşleştirme
