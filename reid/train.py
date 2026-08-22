@@ -51,26 +51,63 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 class CropDataset(Dataset):
     """Onbellekteki kafa kirpmalarini okur (cache_crops.py ciktisi)."""
 
-    def __init__(self, df, crop_dir, label_map, size=224, train=True):
+    def __init__(self, df, crop_dir, label_map, size=224, train=True,
+                 profile='head'):
+        """
+        profile: on isleme profili. Egitim ile CIKARIM ayni profili kullanmali,
+        aksi halde model ogrendiginden farkli bir goruntu dagilimiyla
+        karsilasir ve kazanc buyuk olcude kaybolur.
+
+          'head' - onbellekteki kare kafa kirpmasi dogrudan `size`'a olceklenir.
+                   reid/embed.py --region head ile eslesir.
+          'full' - tum kare; dogrulama/cikarim yolu Resize(size*256/224) ->
+                   CenterCrop(size), yani image-analysis-agent'in
+                   turtle_model.extract_features yolunun aynisi.
+        """
         self.df = df.reset_index(drop=True)
         self.crop_dir = crop_dir
         self.label_map = label_map
-        if train:
-            self.tf = transforms.Compose([
-                transforms.RandomResizedCrop(size, scale=(0.7, 1.0), ratio=(0.9, 1.11)),
-                transforms.RandomHorizontalFlip(),
-                transforms.ColorJitter(brightness=0.25, contrast=0.25,
-                                       saturation=0.25, hue=0.03),
-                transforms.ToTensor(),
-                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-                transforms.RandomErasing(p=0.25, scale=(0.02, 0.15)),
-            ])
+        self.profile = profile
+
+        renk = transforms.ColorJitter(brightness=0.25, contrast=0.25,
+                                      saturation=0.25, hue=0.03)
+        son = [transforms.ToTensor(),
+               transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)]
+
+        if profile == 'full':
+            kisa_kenar = int(round(size * 256 / 224))     # 224 -> 256
+            if train:
+                # CenterCrop'un gorecegi bolgeye yakin ama jitterli kirpma
+                self.tf = transforms.Compose([
+                    transforms.RandomResizedCrop(size, scale=(0.55, 1.0),
+                                                 ratio=(0.85, 1.18)),
+                    transforms.RandomHorizontalFlip(),
+                    renk,
+                    *son,
+                    transforms.RandomErasing(p=0.25, scale=(0.02, 0.15)),
+                ])
+            else:
+                # Cikarimla birebir ayni
+                self.tf = transforms.Compose([
+                    transforms.Resize(kisa_kenar),
+                    transforms.CenterCrop(size),
+                    *son,
+                ])
         else:
-            self.tf = transforms.Compose([
-                transforms.Resize((size, size)),
-                transforms.ToTensor(),
-                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-            ])
+            if train:
+                self.tf = transforms.Compose([
+                    transforms.RandomResizedCrop(size, scale=(0.7, 1.0),
+                                                 ratio=(0.9, 1.11)),
+                    transforms.RandomHorizontalFlip(),
+                    renk,
+                    *son,
+                    transforms.RandomErasing(p=0.25, scale=(0.02, 0.15)),
+                ])
+            else:
+                self.tf = transforms.Compose([
+                    transforms.Resize((size, size)),
+                    *son,
+                ])
 
     def __len__(self):
         return len(self.df)
@@ -145,10 +182,11 @@ class EmbeddingNet(nn.Module):
 # --------------------------------------------------------------------------- #
 
 @torch.no_grad()
-def embed_split(model, df, crop_dir, size, batch_size, workers, device):
+def embed_split(model, df, crop_dir, size, batch_size, workers, device,
+                profile='head'):
     model.eval()
     ds = CropDataset(df, crop_dir, {i: 0 for i in df['identity'].unique()},
-                     size=size, train=False)
+                     size=size, train=False, profile=profile)
     use_cuda = device.type == 'cuda'
     dl = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=workers,
                     pin_memory=use_cuda)
@@ -185,6 +223,8 @@ def main():
     ap = argparse.ArgumentParser(description='ArcFace ile kaplumbaga re-ID egitimi')
     ap.add_argument('--catalog', default=os.path.join(HERE, 'data', 'catalog.csv'))
     ap.add_argument('--crop-dir', default=os.path.join(HERE, 'data', 'crops'))
+    ap.add_argument('--profile', default='head', choices=['head', 'full'],
+                    help='on isleme profili; cikarim tarafiyla AYNI olmali')
     ap.add_argument('--split', default='split_closed')
     ap.add_argument('--backbone', default='resnet18', choices=sorted(BACKBONES))
     ap.add_argument('--embedding-dim', type=int, default=512)
@@ -219,14 +259,15 @@ def main():
     identities = sorted(train_df['identity'].unique())
     label_map = {ident: i for i, ident in enumerate(identities)}
 
-    print(f'backbone={args.backbone} size={args.size} dim={args.embedding_dim}')
+    print(f'backbone={args.backbone} size={args.size} dim={args.embedding_dim} '
+          f'profile={args.profile}')
     print(f'egitim {len(train_df)} foto / {len(identities)} birey | '
           f'dogrulama {len(valid_df)} foto')
     print(f'threads={args.threads} workers={args.workers} device={device}')
 
     use_cuda = device.type == 'cuda'
     train_ds = CropDataset(train_df, args.crop_dir, label_map,
-                           size=args.size, train=True)
+                           size=args.size, train=True, profile=args.profile)
     train_dl = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
                           num_workers=args.workers, drop_last=True,
                           pin_memory=use_cuda, persistent_workers=args.workers > 0)
@@ -296,9 +337,9 @@ def main():
 
         if epoch % args.eval_every == 0 or epoch == args.epochs:
             gal = embed_split(model, train_df, args.crop_dir, args.size,
-                              args.batch_size, args.workers, device)
+                              args.batch_size, args.workers, device, args.profile)
             val = embed_split(model, valid_df, args.crop_dir, args.size,
-                              args.batch_size, args.workers, device)
+                              args.batch_size, args.workers, device, args.profile)
             top1, mAP = rank1_map(gal, gal_ident, val, val_ident)
             entry.update(valid_top1=top1, valid_mAP=mAP)
 
@@ -309,6 +350,7 @@ def main():
                     'backbone': args.backbone,
                     'embedding_dim': args.embedding_dim,
                     'size': args.size,
+                    'profile': args.profile,
                     'identities': identities,
                     'valid_top1': top1,
                     'valid_mAP': mAP,

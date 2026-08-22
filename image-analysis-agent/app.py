@@ -101,19 +101,24 @@ def analyze_image():
                 'request_id': request_id
             }), 400
 
-        # Process image
-        logger.info(f"[{request_id}] Processing image...")
-        processed_image = processor.preprocess(image)
-
-        # Analyze image
-        logger.info(f"[{request_id}] Analyzing image with model...")
-        analysis_result = model.identify_turtle(processed_image)
+        # Modele HAM BGR goruntu verilir, processor.preprocess() ciktisi DEGIL.
+        #
+        # preprocess() goruntuyu 640x640'a squash eder (en-boy orani bozulur),
+        # float'a cevirir ve BGR->RGB yapar. extract_features ise girdiyi BGR
+        # kabul edip BIR KEZ DAHA BGR->RGB uyguluyor - renk kanallari ters
+        # doner. Sonuc: galeri kayitlari (build_gallery.py ham goruntu kullanir)
+        # ile sorgular farkli on islemeden geciyordu.
+        #
+        # Olculdu: ayni fotografin galeri gomusu ile sorgu gomusu arasindaki
+        # kosinus 0.248 (olmasi gereken 1.0). Bu tek basina birey tanima
+        # dogrulugunu %68'den %10'a dusuruyordu.
+        logger.info(f"[{request_id}] Extracting biometric embedding...")
+        analysis_result = model.identify_turtle(image)
 
         if analysis_result.get('confidence', 1.0) < CONFIDENCE_THRESHOLD:
             analysis_result['warning'] = 'Low confidence match'
 
-        # Extract features for similarity search
-        features = model.extract_features(processed_image)
+        features = model.extract_features(image)
 
         response = {
             'success': True,
@@ -171,11 +176,8 @@ def extract_features():
                 'error': 'Invalid image format'
             }), 400
 
-        # Process image
-        processed_image = processor.preprocess(image)
-
-        # Extract features
-        features = model.extract_features(processed_image)
+        # Ham BGR goruntu (bkz. /api/analyze icindeki not)
+        features = model.extract_features(image)
 
         return jsonify({
             'success': True,

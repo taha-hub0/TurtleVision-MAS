@@ -92,6 +92,20 @@ class TurtleIdentificationModel:
                 logger.info("Fine-tuned model yuklendi: %s (epoch %s, valid_top1=%s)",
                             self.model_path, checkpoint.get('epoch'),
                             checkpoint.get('valid_top1'))
+
+                # Bu sinif goruntuleri Resize(256)+CenterCrop(224) ile, yani
+                # TUM KARE olarak isler ('full' profili). Checkpoint kafa
+                # kirpmalariyla egitildiyse model ogrendiginden farkli bir
+                # dagilim gorur ve egitimin kazanci buyuk olcude kaybolur.
+                # Sessizce kotu calismasindansa acikca uyar.
+                profile = checkpoint.get('profile')
+                if profile and profile != 'full':
+                    logger.warning(
+                        "Checkpoint '%s' profiliyle egitilmis ama bu servis tum "
+                        "kareyi ('full') isliyor. Dogruluk beklenenin altinda "
+                        "kalir; ya 'full' profille egitin ya da cikarim yoluna "
+                        "kafa kirpma ekleyin (bkz. reid/README.md).", profile)
+                self.profile = profile or 'full'
             else:
                 # nn.Linear(2048, 128) DEGIL: o katman egitilmemis ve her
                 # baslangicta farkli olurdu. nn.Identity deterministiktir.
@@ -100,6 +114,7 @@ class TurtleIdentificationModel:
                 self.embedding_dim = 2048
                 self.fine_tuned = False
                 self.backbone_name = 'resnet50'
+                self.profile = 'full'
                 logger.info("ImageNet ResNet50 govdesi (2048-d, egitilmemis ama "
                             "deterministik) on %s", self.device)
 
@@ -220,4 +235,5 @@ class TurtleIdentificationModel:
             # (fine-tuned checkpoint -> checkpoint'teki deger, aksi halde 2048)
             'output_dimension': self.embedding_dim,
             'fine_tuned': self.fine_tuned,
+            'preprocess_profile': getattr(self, 'profile', 'full'),
         }
