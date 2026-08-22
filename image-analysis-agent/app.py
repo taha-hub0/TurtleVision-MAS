@@ -41,15 +41,63 @@ except Exception as e:
     biolytics = None
 
 
+def galeri_uyum_kontrolu():
+    """Model ile galeri gomuleri ayni bicimde mi?
+
+    Model degistiginde (or. checkpoint eksik oldugu icin ImageNet govdesine
+    dusuldugunde) gomu boyutu galeridekinden farkli olur. Bu durumda
+    SimilarityStrategy her karsilastirmada 0.0 doner ve sistem HER fotografa
+    "yeni birey" der - hicbir hata firlatmadan, arayuzde de belli olmadan.
+
+    Sessiz basarisizlik yanlis cevaptan kotudur: yanlis cevap fark edilir,
+    bu edilmez. O yuzden saglik ucu bunu acikca bildirir.
+    """
+    if model is None:
+        return False, 'Model yuklenemedi'
+    if matcher is None:
+        return False, 'Matcher yuklenemedi'
+
+    try:
+        kayitlar = matcher.db.get_all_turtles()
+    except Exception as e:
+        return False, f'Galeri okunamadi: {e}'
+
+    if not kayitlar:
+        return False, 'Galeri bos - hicbir eslesme bulunamaz'
+
+    galeri_dim = len(kayitlar[0].get('biometric_vector') or [])
+    model_dim = int(getattr(model, 'embedding_dim', 0) or 0)
+
+    if galeri_dim != model_dim:
+        return False, (
+            f'Gomu boyutu uyusmuyor: model {model_dim}-d, galeri {galeri_dim}-d. '
+            f'Sistem her fotografa "yeni birey" der. '
+            f'Cozum: dogru checkpoint icin `python reid/fetch_model.py`, '
+            f'ya da galeriyi yeniden gomun: `python reid/build_gallery.py`.')
+
+    return True, None
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Sağlık kontrolü"""
-    return jsonify({
-        'status': 'healthy',
+    uyumlu, sorun = galeri_uyum_kontrolu()
+
+    payload = {
+        'status': 'healthy' if uyumlu else 'degraded',
         'service': 'image-analysis-agent',
         'model_loaded': model is not None,
+        'matcher_ready': matcher is not None,
         'timestamp': datetime.now().isoformat()
-    }), 200
+    }
+    if model is not None:
+        payload['embedding_dim'] = getattr(model, 'embedding_dim', None)
+        payload['fine_tuned'] = getattr(model, 'fine_tuned', None)
+    if not uyumlu:
+        payload['issue'] = sorun
+
+    # Servis ayakta ama guvenilir cevap veremiyor -> 503
+    return jsonify(payload), 200 if uyumlu else 503
 
 
 @app.route('/api/analyze', methods=['POST'])

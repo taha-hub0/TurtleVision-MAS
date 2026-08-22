@@ -58,24 +58,45 @@ embed.py          tüm veri setini gömer -> data/embeddings_*.npz
 evaluate.py       top-1 / top-5 / mAP + açık-set eşik taraması
 ```
 
-### Çalıştırma
+### Sadece modeli kullanmak istiyorsanız
+
+Eğitmeye gerek yok — hazır checkpoint bir GitHub Release'inde:
+
+```bash
+python reid/fetch_model.py
+```
+
+Betik dosyayı `image-analysis-agent/src/models/weights/arcface_best.pt`
+konumuna indirir ve SHA256'sını doğrular. Checkpoint depoda tutulmuyor:
+44 MB'lık ikili bir dosya ve model yeniden eğitilecek; git geçmişi kalıcı
+olduğu için her iterasyon depoyu geri alınamaz biçimde büyütürdü.
+
+> **Model ile galeri birbirine bağlıdır.** `kaggle_db.json` içindeki gömüler
+> belirli bir modelle üretilmiştir. Model değişirse galeri de
+> `build_gallery.py` ile yeniden gömülmelidir; aksi halde boyutlar uyuşmaz ve
+> sistem **her fotoğrafa "yeni birey" der**. Bu durumda `/health` ucu
+> `degraded` + HTTP 503 döner ve nedenini söyler.
+
+### Sıfırdan eğitmek
 
 ```bash
 cd reid
 pip install -r requirements.txt
 
-python prepare_data.py                    # ~2 dk
-python cache_crops.py                     # ~3 dk, 156 MB önbellek
-python train.py --backbone resnet18 --epochs 20   # CPU'da ~2 sa
-python embed.py --weights data/arcface_best.pt
-python evaluate.py --embeddings data/embeddings_arcface_head.npz
-```
+python prepare_data.py                              # ~2 dk
 
-Eğitilmiş checkpoint'i servise vermek için:
+# Profil seçimi — çıkarım tarafıyla AYNI olmalı:
+#   full : uygulamanın bugünkü yolu (Resize(256) -> CenterCrop(224), tüm kare)
+#   head : kafa kırpma (daha güçlü sinyal, ama çıkarımda kafa bbox'i gerekir)
+python cache_crops.py --region full --out-dir data/crops_full
+python train.py --profile full --crop-dir data/crops_full \
+                --backbone resnet18 --epochs 30    # GPU'da ~10 dk
 
-```bash
-cp data/arcface_best.pt ../image-analysis-agent/src/models/weights/
-# ve MODEL_PATH bu dosyayı göstersin (bkz. image-analysis-agent/.env.example)
+python embed.py --region full --weights data/arcface_best.pt
+python evaluate.py --embeddings data/embeddings_arcface_full.npz
+
+# Galeriyi yeni modelle yeniden göm
+python build_gallery.py --images-root <veri-seti-yolu> --model-path data/arcface_best.pt
 ```
 
 ## Tasarım kararları
@@ -122,8 +143,37 @@ kurulan herhangi bir eşik ya çok fazla yanlış eşleşme ya çok fazla kaçı
 `split_closed_random`'ın 4,6'dan 22'ye fırlaması da bunu doğruluyor: o
 bölünme aynı günün karelerini sızdırıyor.
 
-ArcFace ile ince ayar sonrası sayılar için `data/eval_results.json` ve
-`data/arcface_best_history.json` dosyalarına bakın.
+ArcFace ile ince ayar (`--profile full`, ResNet18, 30 epoch), test bölünmesi:
+
+| Bölünme | top-1 | top-5 | mAP |
+|---|---:|---:|---:|
+| `split_closed` (zamansal) | %10,75 | %18,43 | %7,66 |
+| `split_closed_random` | %71,28 | %79,90 | %31,36 |
+
+Canlı API üzerinden (galeri 875 kayıt / 438 birey, sorgu her bireyin
+galeride bulunmayan bir fotoğrafı, n=40):
+
+| Senaryo | ImageNet gövdesi | ArcFace |
+|---|---:|---:|
+| Aynı gün (iyimser) | %10,0 | %85,0 |
+| Farklı gün (gerçekçi) | %2,5 | %32,5 |
+
+"Farklı gün" sahadaki gerçek senaryodur: sorgu, galeriyle aynı çekim
+seansından değildir.
+
+### Bu sayıların söylediği
+
+`split_closed_random` (%71,28) ile `split_closed` (%10,75) arasındaki
+uçurum modelin ne öğrendiğini ele veriyor. Rastgele bölünme aynı günün
+karelerini hem galeriye hem sorguya sızdırıyor; model bireyi değil **çekim
+seansını** (ışık, su rengi, arka plan, poz) eşleştirerek de yüksek skor
+alabiliyor. Eğitim doğruluğunun %94,5 iken doğrulama top-1'inin %16,8'de
+kalması da aynı şeyi gösteriyor.
+
+Sebebi tüm karenin modele verilmesi: kestirme yol açık kalıyor. Kafa
+kırpmalı bir ön denemede doğrulama top-1'i **4 epoch'ta %28**'e ulaşmıştı;
+bu tam kare koşusu **30 epoch'ta %16,8**'de kaldı. Kafa dedektörü bu yüzden
+sonraki adım.
 
 ## Bilinen sınırlar
 
