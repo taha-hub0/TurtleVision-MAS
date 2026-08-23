@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import base64
 import cv2
+import json
 import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
@@ -20,7 +21,7 @@ CORS(app)
 
 # Configuration
 PORT = int(os.getenv('PORT', 5000))
-MODEL_PATH = os.getenv('MODEL_PATH', './src/models/weights/best_model.pt')
+MODEL_PATH = os.getenv('MODEL_PATH', './src/models/weights/arcface_best.pt')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.85))
 
 # Initialize logger
@@ -41,15 +42,110 @@ except Exception as e:
     biolytics = None
 
 
+def galeri_uyum_kontrolu():
+    """Model ile galeri gomuleri ayni bicimde mi?
+
+    Model degistiginde (or. checkpoint eksik oldugu icin ImageNet govdesine
+    dusuldugunde) gomu boyutu galeridekinden farkli olur. Bu durumda
+    SimilarityStrategy her karsilastirmada 0.0 doner ve sistem HER fotografa
+    "yeni birey" der - hicbir hata firlatmadan, arayuzde de belli olmadan.
+
+    Sessiz basarisizlik yanlis cevaptan kotudur: yanlis cevap fark edilir,
+    bu edilmez. O yuzden saglik ucu bunu acikca bildirir.
+    """
+    if model is None:
+        return False, 'Model yuklenemedi'
+    if matcher is None:
+        return False, 'Matcher yuklenemedi'
+
+    try:
+        kayitlar = matcher.db.get_all_turtles()
+    except Exception as e:
+        return False, f'Galeri okunamadi: {e}'
+
+    if not kayitlar:
+        return False, 'Galeri bos - hicbir eslesme bulunamaz'
+
+    galeri_dim = len(kayitlar[0].get('biometric_vector') or [])
+    model_dim = int(getattr(model, 'embedding_dim', 0) or 0)
+
+    if galeri_dim != model_dim:
+        return False, (
+            f'Gomu boyutu uyusmuyor: model {model_dim}-d, galeri {galeri_dim}-d. '
+            f'Sistem her fotografa "yeni birey" der. '
+            f'Cozum: dogru checkpoint icin `python reid/fetch_model.py`, '
+            f'ya da galeriyi yeniden gomun: `python reid/build_gallery.py`.')
+
+    return galeri_ayar_kontrolu()
+
+
+def galeri_ayar_kontrolu():
+    """Galeri, su anki cikarim ayariyla mi uretilmis?
+
+    Boyut kontrolu yetmiyor: flip-TTA acik/kapali AYNI boyutta ama FARKLI
+    vektorler uretir (olculdu: kosinus 0.965). Galeri bir ayarla gomulup
+    sorgu digeriyle gelirse benzerlikler sessizce bozulur - hicbir hata
+    firlamaz, arayuzde de belli olmaz.
+
+    build_gallery.py galerinin yanina kaggle_db.meta.json birakir; burada
+    onu modelin su anki ayariyla karsilastiriyoruz.
+    """
+    meta_yolu = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'data', 'kaggle_seaturtle', 'kaggle_db.meta.json')
+    if not os.path.exists(meta_yolu):
+        # Eski galeriler bu dosyayi tasimiyor. Servisi durdurmuyoruz ama
+        # dogrulanmadigini soyluyoruz - sessizce gecmekten iyisi budur.
+        logger.warning('Galeri uyum kaydi yok (%s). Galerinin bu modelle '
+                       'uretildigi dogrulanamiyor; `python reid/build_gallery.py` '
+                       'ile yeniden gomup kaydi olusturun.', meta_yolu)
+        return True, None
+
+    try:
+        with open(meta_yolu, encoding='utf-8') as f:
+            meta = json.load(f)
+    except Exception as e:
+        logger.warning('Galeri uyum kaydi okunamadi: %s', e)
+        return True, None
+
+    farklar = []
+    for alan, simdiki in (('flip_tta', getattr(model, 'flip_tta', None)),
+                          ('preprocess_profile', getattr(model, 'profile', 'full')),
+                          ('backbone', getattr(model, 'backbone_name', None))):
+        beklenen = meta.get(alan)
+        if beklenen is not None and simdiki is not None and beklenen != simdiki:
+            farklar.append(f'{alan}: galeri={beklenen!r}, model={simdiki!r}')
+
+    if farklar:
+        return False, (
+            'Galeri farkli bir cikarim ayariyla uretilmis (' +
+            '; '.join(farklar) + '). Gomu boyutu ayni oldugu icin '
+            'karsilastirma calisiyor gorunur ama benzerlikler bozuk olur. '
+            'Cozum: `python reid/build_gallery.py --images-root <veri-seti>`.')
+
+    return True, None
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Sağlık kontrolü"""
-    return jsonify({
-        'status': 'healthy',
+    uyumlu, sorun = galeri_uyum_kontrolu()
+
+    payload = {
+        'status': 'healthy' if uyumlu else 'degraded',
         'service': 'image-analysis-agent',
         'model_loaded': model is not None,
+        'matcher_ready': matcher is not None,
         'timestamp': datetime.now().isoformat()
-    }), 200
+    }
+    if model is not None:
+        payload['embedding_dim'] = getattr(model, 'embedding_dim', None)
+        payload['fine_tuned'] = getattr(model, 'fine_tuned', None)
+        payload['flip_tta'] = getattr(model, 'flip_tta', None)
+    if not uyumlu:
+        payload['issue'] = sorun
+
+    # Servis ayakta ama guvenilir cevap veremiyor -> 503
+    return jsonify(payload), 200 if uyumlu else 503
 
 
 @app.route('/api/analyze', methods=['POST'])
@@ -101,19 +197,24 @@ def analyze_image():
                 'request_id': request_id
             }), 400
 
-        # Process image
-        logger.info(f"[{request_id}] Processing image...")
-        processed_image = processor.preprocess(image)
-
-        # Analyze image
-        logger.info(f"[{request_id}] Analyzing image with model...")
-        analysis_result = model.identify_turtle(processed_image)
+        # Modele HAM BGR goruntu verilir, processor.preprocess() ciktisi DEGIL.
+        #
+        # preprocess() goruntuyu 640x640'a squash eder (en-boy orani bozulur),
+        # float'a cevirir ve BGR->RGB yapar. extract_features ise girdiyi BGR
+        # kabul edip BIR KEZ DAHA BGR->RGB uyguluyor - renk kanallari ters
+        # doner. Sonuc: galeri kayitlari (build_gallery.py ham goruntu kullanir)
+        # ile sorgular farkli on islemeden geciyordu.
+        #
+        # Olculdu: ayni fotografin galeri gomusu ile sorgu gomusu arasindaki
+        # kosinus 0.248 (olmasi gereken 1.0). Bu tek basina birey tanima
+        # dogrulugunu %68'den %10'a dusuruyordu.
+        logger.info(f"[{request_id}] Extracting biometric embedding...")
+        analysis_result = model.identify_turtle(image)
 
         if analysis_result.get('confidence', 1.0) < CONFIDENCE_THRESHOLD:
             analysis_result['warning'] = 'Low confidence match'
 
-        # Extract features for similarity search
-        features = model.extract_features(processed_image)
+        features = model.extract_features(image)
 
         response = {
             'success': True,
@@ -171,11 +272,8 @@ def extract_features():
                 'error': 'Invalid image format'
             }), 400
 
-        # Process image
-        processed_image = processor.preprocess(image)
-
-        # Extract features
-        features = model.extract_features(processed_image)
+        # Ham BGR goruntu (bkz. /api/analyze icindeki not)
+        features = model.extract_features(image)
 
         return jsonify({
             'success': True,
@@ -330,6 +428,30 @@ def biolytics_auto_detect():
 
 
 # ============================================================================
+def expected_embedding_dim():
+    """Modelin gercekte urettigi gomu boyutu.
+
+    Bu deger 128 olarak sabit kodlanmisti; model degistiginde (or. egitilmis
+    checkpoint devreye girdiginde) istekler "must be a list of 128 numbers"
+    ile reddediliyordu. Artik modele soruluyor.
+    """
+    if model is not None and getattr(model, 'embedding_dim', None):
+        return int(model.embedding_dim)
+    return 2048
+
+
+def validate_biometric_vector(vector):
+    """Gecerliyse (True, None), degilse (False, hata_mesaji) dondur."""
+    if not isinstance(vector, list) or not vector:
+        return False, 'biometric_vector must be a non-empty list of numbers'
+    expected = expected_embedding_dim()
+    if len(vector) != expected:
+        return False, (f'biometric_vector must be a list of {expected} numbers '
+                       f'(gelen: {len(vector)}). Model degistiyse kayitli '
+                       f'vektorlerin yeniden gomulmesi gerekir.')
+    return True, None
+
+
 # SeaTurtleID2022 Matching Endpoints
 # ============================================================================
 # Matching Agent tarafından çağrılır. Gelen biyometrik vektörü
@@ -354,7 +476,7 @@ def match_turtle():
     
     Request JSON:
     {
-        "biometric_vector": [0.45, 0.23, ..., 0.78],  # 128 eleman
+        "biometric_vector": [0.45, 0.23, ..., 0.78],  # modelin gomu boyutu kadar
         "threshold": 0.60,  # Optional
         "method": "cosine",  # Optional: 'cosine' | 'euclidean'
         "metadata": {...}  # Optional: fotoğraf metadatası
@@ -381,10 +503,11 @@ def match_turtle():
 
         biometric_vector = data.get('biometric_vector')
         
-        if not isinstance(biometric_vector, list) or len(biometric_vector) != 128:
+        ok, hata = validate_biometric_vector(biometric_vector)
+        if not ok:
             return jsonify({
                 'success': False,
-                'error': 'biometric_vector must be a list of 128 numbers',
+                'error': hata,
                 'request_id': request_id
             }), 400
 
@@ -397,7 +520,12 @@ def match_turtle():
         alternatives = []
         for alt in top_n_result['top_alternatives']:
             alternatives.append({
+                # turtle_id: bu bireyin sorguya en cok benzeyen KARESI.
+                # identity: bireyin kendisi - liste artik ayni bireyin
+                # tekrarlanan kareleri degil, N ayri aday iceriyor.
                 'turtle_id': alt['turtle_id'],
+                'identity': alt['identity'],
+                'frames': alt['frames'],
                 'species': alt['species'],
                 'similarity': alt['similarity'],
                 'url': f"http://localhost:5000/api/gallery/{alt['turtle_id']}.jpg"
@@ -410,6 +538,8 @@ def match_turtle():
             'classification': match_result.classification,
             'confidence': match_result.confidence,
             'matched_turtle_id': match_result.matched_turtle_id,
+            'matched_identity': match_result.matched_identity,
+            'supporting_frames': match_result.supporting_frames,
             'similarity_score': match_result.similarity_score,
             'top_alternatives': alternatives,
             'matching_method': match_result.matching_method,
@@ -435,7 +565,8 @@ def register_turtle():
         biometric_vector = data.get('biometric_vector')
         turtle_id = data.get('turtle_id', f"TURTLE_{datetime.now().strftime('%H%M%S')}")
         
-        if not biometric_vector or len(biometric_vector) != 128:
+        ok, hata = validate_biometric_vector(biometric_vector)
+        if not ok:
             return jsonify({'success': False, 'error': 'Invalid biometric vector'}), 400
             
         record = {
@@ -564,10 +695,11 @@ def match_turtle_top_n():
         biometric_vector = data.get('biometric_vector')
         top_n = data.get('top_n', 5)
         
-        if not isinstance(biometric_vector, list) or len(biometric_vector) != 128:
+        ok, hata = validate_biometric_vector(biometric_vector)
+        if not ok:
             return jsonify({
                 'success': False,
-                'error': 'biometric_vector must be a list of 128 numbers'
+                'error': hata
             }), 400
 
         # Top N eşleştirme
@@ -585,12 +717,16 @@ def match_turtle_top_n():
                 'classification': main_result.classification,
                 'confidence': main_result.confidence,
                 'matched_turtle_id': main_result.matched_turtle_id,
+                'matched_identity': main_result.matched_identity,
+                'supporting_frames': main_result.supporting_frames,
                 'similarity_score': main_result.similarity_score,
                 'reasoning': main_result.reasoning,
             },
             'top_alternatives': [
                 {
                     'turtle_id': alt['turtle_id'],
+                    'identity': alt['identity'],
+                    'frames': alt['frames'],
                     'species': alt['species'],
                     'similarity': alt['similarity'],
                 }

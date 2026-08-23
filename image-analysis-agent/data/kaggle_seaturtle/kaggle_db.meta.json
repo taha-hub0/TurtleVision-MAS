@@ -1,0 +1,11 @@
+{
+  "embedding_dim": 512,
+  "backbone": "resnet18",
+  "fine_tuned": true,
+  "preprocess_profile": "full",
+  "flip_tta": true,
+  "model_sha256": "3252475a3606b59332964723c7e0a6039728dc027d1612435cd5face9061a31c",
+  "record_count": 875,
+  "identity_count": 438,
+  "built_at": "2026-08-23T16:42:42+00:00"
+}

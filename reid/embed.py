@@ -56,18 +56,32 @@ class TurtleCropDataset(Dataset):
         self.image_root = image_root
         self.region = region
         self.margin = margin
-        self.tf = transforms.Compose([
-            transforms.Resize((size, size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-        ])
+        norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                    std=[0.229, 0.224, 0.225])
+        if region == 'full':
+            # image-analysis-agent'in extract_features yoluyla BIREBIR ayni:
+            # Resize(kisa kenar 256) -> CenterCrop(224). Galeri ve sorgu ayni
+            # on islemeden gecmezse kosinus benzerligi anlamsizlasir.
+            self.tf = transforms.Compose([
+                transforms.Resize(int(round(size * 256 / 224))),
+                transforms.CenterCrop(size),
+                transforms.ToTensor(),
+                norm,
+            ])
+        else:
+            self.tf = transforms.Compose([
+                transforms.Resize((size, size)),
+                transforms.ToTensor(),
+                norm,
+            ])
 
     def __len__(self):
         return len(self.df)
 
     def _box_for(self, row):
         """Istenen bolge -> yoksa turtle bbox -> o da yoksa tum kare."""
+        if self.region == 'full':
+            return (0, 0, int(row['width']), int(row['height'])), 'full'
         order = ['head', 'turtle'] if self.region == 'head' else ['turtle', 'head']
         for name in order:
             x, y, w, h = (row[f'{name}_{k}'] for k in ('x', 'y', 'w', 'h'))
@@ -179,7 +193,9 @@ def main():
     ap.add_argument('--image-root', default=DEFAULT_IMAGE_ROOT,
                     help='file_name yollarinin koku (images/ klasorunun ust dizini)')
     ap.add_argument('--backbone', default='resnet50', choices=sorted(BACKBONES))
-    ap.add_argument('--region', default='head', choices=['head', 'turtle'])
+    ap.add_argument('--region', default='head',
+                    choices=['head', 'turtle', 'full'],
+                    help="full: tum kare, uygulamanin cikarim yoluyla ayni")
     ap.add_argument('--batch-size', type=int, default=32)
     ap.add_argument('--workers', type=int, default=8)
     ap.add_argument('--size', type=int, default=224)

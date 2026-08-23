@@ -8,7 +8,7 @@ PORT = int(os.getenv('PORT', 5000))
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 # Model Configuration
-MODEL_PATH = os.getenv('MODEL_PATH', './src/models/weights/best_model.pt')
+MODEL_PATH = os.getenv('MODEL_PATH', './src/models/weights/arcface_best.pt')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.85))
 MODEL_INPUT_SIZE = (640, 640, 3)
 

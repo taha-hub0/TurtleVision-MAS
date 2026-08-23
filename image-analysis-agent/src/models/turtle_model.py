@@ -44,19 +44,27 @@ class TurtleIdentificationModel:
     Her iki durumda da rastgele, eğitilmemiş bir katman devrede değildir.
     """
 
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = None, flip_tta: bool = None):
         """
         Model initialization
 
         Args:
             model_path: reid/train.py'nin ürettiği ArcFace checkpoint yolu.
                         Yoksa ImageNet gövdesine düşülür.
+            flip_tta:   Yatay çevirme test-zamanı artırımı (bkz.
+                        `extract_features`). None ise TURTLE_FLIP_TTA ortam
+                        değişkenine bakılır, o da yoksa açıktır.
         """
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_path = model_path
         self.model = None
         self.embedding_dim = None
         self.fine_tuned = False
+        if flip_tta is None:
+            kapali = ('0', 'false', 'no', 'off')
+            flip_tta = os.environ.get('TURTLE_FLIP_TTA', '1').strip().lower() \
+                not in kapali
+        self.flip_tta = bool(flip_tta)
 
         self._load_model()
 
@@ -92,6 +100,20 @@ class TurtleIdentificationModel:
                 logger.info("Fine-tuned model yuklendi: %s (epoch %s, valid_top1=%s)",
                             self.model_path, checkpoint.get('epoch'),
                             checkpoint.get('valid_top1'))
+
+                # Bu sinif goruntuleri Resize(256)+CenterCrop(224) ile, yani
+                # TUM KARE olarak isler ('full' profili). Checkpoint kafa
+                # kirpmalariyla egitildiyse model ogrendiginden farkli bir
+                # dagilim gorur ve egitimin kazanci buyuk olcude kaybolur.
+                # Sessizce kotu calismasindansa acikca uyar.
+                profile = checkpoint.get('profile')
+                if profile and profile != 'full':
+                    logger.warning(
+                        "Checkpoint '%s' profiliyle egitilmis ama bu servis tum "
+                        "kareyi ('full') isliyor. Dogruluk beklenenin altinda "
+                        "kalir; ya 'full' profille egitin ya da cikarim yoluna "
+                        "kafa kirpma ekleyin (bkz. reid/README.md).", profile)
+                self.profile = profile or 'full'
             else:
                 # nn.Linear(2048, 128) DEGIL: o katman egitilmemis ve her
                 # baslangicta farkli olurdu. nn.Identity deterministiktir.
@@ -100,6 +122,7 @@ class TurtleIdentificationModel:
                 self.embedding_dim = 2048
                 self.fine_tuned = False
                 self.backbone_name = 'resnet50'
+                self.profile = 'full'
                 logger.info("ImageNet ResNet50 govdesi (2048-d, egitilmemis ama "
                             "deterministik) on %s", self.device)
 
@@ -114,8 +137,8 @@ class TurtleIdentificationModel:
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
 
-            logger.info("Gomu boyutu: %d | fine_tuned: %s",
-                        self.embedding_dim, self.fine_tuned)
+            logger.info("Gomu boyutu: %d | fine_tuned: %s | flip_tta: %s",
+                        self.embedding_dim, self.fine_tuned, self.flip_tta)
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
@@ -149,13 +172,33 @@ class TurtleIdentificationModel:
 
     def extract_features(self, image: np.ndarray) -> np.ndarray:
         """
-        Görüntüden gerçek 128D özellik vektörü çıkar (benzerlik araması için)
-        
+        Görüntüden L2-normalize edilmiş biyometrik gömü çıkar.
+
+        Boyut sabit değildir: fine-tuned checkpoint'te checkpoint'in
+        `embedding_dim` değeri, aksi halde 2048 (bkz. `self.embedding_dim`).
+
+        Flip-TTA (test-time augmentation)
+        ---------------------------------
+        `self.flip_tta` açıkken görüntü hem düz hem yatay çevrilmiş haliyle
+        modele verilir ve iki gömünün ortalaması alınır. Kaplumbağa kafası
+        kareye soldan ya da sağdan girebildiği için tek yön modele gereksiz
+        bir varyans bırakıyor; ortalama bunu bastırır. SeaTurtleID2022'de
+        ölçüldü: farklı gün top-5 %35.1 -> %38.7, aynı gün doğruluğu
+        değişmedi. Maliyet: kare başına iki ileri geçiş.
+
+        UYARI - galeri/sorgu eşliği
+        ---------------------------
+        Bu bayrak gömünün kendisini değiştirir. Galeri TTA'sız üretilip
+        sorgu TTA'lı gelirse (ya da tersi) kosinüs benzerliği anlamsızlaşır.
+        Galeri `reid/build_gallery.py` ile bu sınıf üzerinden üretilir, yani
+        aynı bayrağı taşır; hangi ayarla üretildiği kaggle_db.meta.json'a
+        yazılır ve `app.py` açılışta doğrular.
+
         Args:
             image: Processed image (OpenCV BGR format)
-            
+
         Returns:
-            Feature vector (numpy array - 128D)
+            Feature vector (numpy array, `self.embedding_dim` boyutunda)
         """
         try:
             # OpenCV BGR -> RGB formatına çevir
@@ -178,7 +221,12 @@ class TurtleIdentificationModel:
             
             with torch.no_grad():
                 features = self.model(input_tensor)
-                
+                if self.flip_tta:
+                    # dims=[3] -> genislik ekseni ([B, C, H, W] duzeni)
+                    features = features + self.model(
+                        torch.flip(input_tensor, dims=[3]))
+                    features = features / 2.0
+
             # Cosine similarity için vektörü L2 normalize et
             features = torch.nn.functional.normalize(features, p=2, dim=1)
             
@@ -220,4 +268,6 @@ class TurtleIdentificationModel:
             # (fine-tuned checkpoint -> checkpoint'teki deger, aksi halde 2048)
             'output_dimension': self.embedding_dim,
             'fine_tuned': self.fine_tuned,
+            'preprocess_profile': getattr(self, 'profile', 'full'),
+            'flip_tta': self.flip_tta,
         }
