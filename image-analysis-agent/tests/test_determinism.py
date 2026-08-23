@@ -13,7 +13,7 @@ Aynı fotoğraf, ajan yeniden başlatıldıktan sonra kosinüs benzerliği
 içindeki kayıtlı vektörler her yeniden başlatmada sessizce geçersizleşiyor,
 eşleştirme çalışıyor gibi görünüp anlamsız sonuç üretiyordu.
 
-Depodaki `check_deterministic.py` bunu yakalayamaz: yalnızca *aynı süreç
+Depodaki `scripts/check_deterministic.py` bunu yakalayamaz: yalnızca *aynı süreç
 içindeki* iki çağrıyı karşılaştırır ve o test her zaman geçer. Asıl testi
 aşağıdaki `test_surecler_arasi_determinizm` yapıyor — modeli ayrı bir
 Python sürecinde kurup sonucu karşılaştırır.
@@ -84,7 +84,7 @@ class TestGomuDeterminizmi(unittest.TestCase):
     # ---------------------------------------------------------------- #
 
     def test_ayni_surecte_determinizm(self):
-        """check_deterministic.py'nin karşılığı — bu zaten geçiyordu."""
+        """scripts/check_deterministic.py'nin karşılığı — bu zaten geçiyordu."""
         import cv2
         img = cv2.imread(self.img_path)
         m = TurtleIdentificationModel()

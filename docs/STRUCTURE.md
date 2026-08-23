@@ -4,8 +4,8 @@
 turtle-id-mas/
 ├── README.md                           # Proje açıklaması
 ├── docker-compose.yml                  # Docker Compose konfigürasyonu
-├── start.sh                            # Linux/macOS başlangıç betiği
-├── start.bat                           # Windows başlangıç betiği
+├── scripts/start.sh                    # Linux/macOS başlangıç betiği
+├── scripts/start.bat                   # Windows başlangıç betiği
 │
 ├── backend/                            # 🎯 Koordinatör Agent (Node.js)
 │   ├── package.json                    # Dependencies

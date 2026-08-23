@@ -244,8 +244,8 @@ docker-compose up -d
 ### Manual Kurulum
 ```bash
 # Setup script'i çalıştır
-bash setup-dev.sh        # Linux/macOS
-setup-dev.bat            # Windows
+bash scripts/setup-dev.sh        # Linux/macOS
+scripts\setup-dev.bat    # Windows
 
 # Tüm agent'ları ayrı terminallerde başlat
 cd backend && npm run dev

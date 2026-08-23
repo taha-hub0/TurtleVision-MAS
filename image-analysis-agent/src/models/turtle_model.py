@@ -30,7 +30,7 @@ class TurtleIdentificationModel:
     her yeniden başladığında sessizce geçersizleşiyor ve eşleştirme çalışıyor
     gibi görünüp anlamsız sonuç üretiyordu.
 
-    `check_deterministic.py` bunu yakalayamıyordu çünkü yalnızca *aynı süreç
+    `scripts/check_deterministic.py` bunu yakalayamıyordu çünkü yalnızca *aynı süreç
     içindeki* iki çağrıyı karşılaştırıyor; o test her zaman geçer. Süreçler
     arası regresyon testi: `image-analysis-agent/tests/test_determinism.py`.
 

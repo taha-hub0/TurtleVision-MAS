@@ -9,6 +9,24 @@
 
 const Joi = require('joi');
 
+/**
+ * Bir Joi hatasindan okunabilir mesajlar cikar.
+ *
+ * Neden yardimci bir fonksiyon: `.error(new Error('...'))` kullanildiginda
+ * Joi `details` dizisini uretmez, duz bir Error dondurur. O halde
+ * `error.details.map(...)` TypeError firlatir ve kullanici alan adi yerine
+ * "Cannot read properties of undefined" gorur. Asagidaki savunma, semada
+ * ileride ayni hata tekrarlanirsa bile en azindan Error'un kendi mesajini
+ * gostermeyi surdurur.
+ */
+function _mesajlariCikar(error) {
+  if (!error) return [];
+  if (Array.isArray(error.details) && error.details.length > 0) {
+    return error.details.map((d) => d.message);
+  }
+  return [error.message || 'Validation failed'];
+}
+
 class GatekeeperAgent {
   constructor() {
     this.name = 'GatekeeperAgent';
@@ -26,11 +44,19 @@ class GatekeeperAgent {
         imageBase64: Joi.string()
           .required()
           .base64()
-          .error(new Error('Invalid base64 image')),
+          .messages({
+            'string.base': 'Invalid base64 image: must be a string',
+            'string.base64': 'Invalid base64 image: not valid base64',
+            'any.required': 'Invalid base64 image: field is required',
+          }),
         timestamp: Joi.date()
           .required()
           .max('now')
-          .error(new Error('Invalid timestamp')),
+          .messages({
+            'date.base': 'Invalid timestamp: not a valid date',
+            'date.max': 'Invalid timestamp: cannot be in the future',
+            'any.required': 'Invalid timestamp: field is required',
+          }),
       }),
 
       // GPS koordinatları
@@ -39,12 +65,22 @@ class GatekeeperAgent {
           .min(-90)
           .max(90)
           .required()
-          .error(new Error('Invalid latitude')),
+          .messages({
+            'number.base': 'Invalid latitude: must be a number',
+            'number.min': 'Invalid latitude: must be >= -90',
+            'number.max': 'Invalid latitude: must be <= 90',
+            'any.required': 'Invalid latitude: field is required',
+          }),
         longitude: Joi.number()
           .min(-180)
           .max(180)
           .required()
-          .error(new Error('Invalid longitude')),
+          .messages({
+            'number.base': 'Invalid longitude: must be a number',
+            'number.min': 'Invalid longitude: must be >= -180',
+            'number.max': 'Invalid longitude: must be <= 180',
+            'any.required': 'Invalid longitude: field is required',
+          }),
         accuracy: Joi.number()
           .min(0)
           .max(10000)
@@ -57,11 +93,19 @@ class GatekeeperAgent {
           .min(2)
           .max(100)
           .required()
-          .error(new Error('Invalid observer name')),
+          .messages({
+            'string.base': 'Invalid observer name: must be a string',
+            'string.min': 'Invalid observer name: too short (min 2)',
+            'string.max': 'Invalid observer name: too long (max 100)',
+            'any.required': 'Invalid observer name: field is required',
+          }),
         email: Joi.string()
           .email()
           .required()
-          .error(new Error('Invalid email')),
+          .messages({
+            'string.base': 'Invalid email: must be a string',
+            'string.email': 'Invalid email: not a valid address',
+          }),
         organization: Joi.string()
           .max(200)
           .optional(),
@@ -106,7 +150,7 @@ class GatekeeperAgent {
 
       if (basicValidation.error) {
         validationResult.errors.push(
-          ...basicValidation.error.details.map((d) => d.message)
+          ..._mesajlariCikar(basicValidation.error)
         );
         return validationResult;
       }
@@ -120,7 +164,7 @@ class GatekeeperAgent {
 
         if (locationValidation.error) {
           validationResult.errors.push(
-            ...locationValidation.error.details.map((d) => d.message)
+            ..._mesajlariCikar(locationValidation.error)
           );
           return validationResult;
         }
@@ -138,7 +182,7 @@ class GatekeeperAgent {
 
         if (observerValidation.error) {
           validationResult.errors.push(
-            ...observerValidation.error.details.map((d) => d.message)
+            ..._mesajlariCikar(observerValidation.error)
           );
           return validationResult;
         }
@@ -155,7 +199,7 @@ class GatekeeperAgent {
 
         if (conditionsValidation.error) {
           validationResult.warnings.push(
-            ...conditionsValidation.error.details.map((d) => d.message)
+            ..._mesajlariCikar(conditionsValidation.error)
           );
         }
       }

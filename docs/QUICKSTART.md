@@ -33,10 +33,10 @@ docker-compose up -d
 #### 1. Setup Script'i Çalıştır
 ```bash
 # Linux/macOS:
-bash setup-dev.sh
+bash scripts/setup-dev.sh
 
 # Windows:
-setup-dev.bat
+scripts\setup-dev.bat
 ```
 
 #### 2. Environment Dosyalarını Yapılandır
