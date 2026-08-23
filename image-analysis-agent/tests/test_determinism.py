@@ -125,6 +125,79 @@ class TestGomuDeterminizmi(unittest.TestCase):
         f = m.extract_features(cv2.imread(self.img_path))
         self.assertAlmostEqual(float(np.linalg.norm(f)), 1.0, places=4)
 
+    def test_flip_tta_varsayilan_acik(self):
+        """Varsayılan açık; ortam değişkeniyle kapatılabilir olmalı."""
+        self.assertTrue(TurtleIdentificationModel().flip_tta)
+        self.assertFalse(TurtleIdentificationModel(flip_tta=False).flip_tta)
+
+        onceki = os.environ.get('TURTLE_FLIP_TTA')
+        try:
+            os.environ['TURTLE_FLIP_TTA'] = '0'
+            self.assertFalse(TurtleIdentificationModel().flip_tta)
+            os.environ['TURTLE_FLIP_TTA'] = 'off'
+            self.assertFalse(TurtleIdentificationModel().flip_tta)
+            os.environ['TURTLE_FLIP_TTA'] = '1'
+            self.assertTrue(TurtleIdentificationModel().flip_tta)
+        finally:
+            if onceki is None:
+                os.environ.pop('TURTLE_FLIP_TTA', None)
+            else:
+                os.environ['TURTLE_FLIP_TTA'] = onceki
+
+    def test_flip_tta_gomuyu_aynalamaya_duyarsiz_yapar(self):
+        """A4'ün asıl kazandırdığı değişmez: f(x) == f(ayna(x)).
+
+        TTA açıkken gömü, düz ve aynalanmış görüntünün ortalamasıdır:
+            f(x)       = (g(x) + g(ayna x)) / 2
+            f(ayna x)  = (g(ayna x) + g(x)) / 2
+        Yani ikisi aynıdır. Kaplumbağa kareye soldan da sağdan da girebildiği
+        için bu, modele gereksiz bir varyansı ortadan kaldırır.
+
+        TTA kapalıyken bu eşitlik yoktur — testin ikinci yarısı onu doğrular
+        ve böylece birinci yarının boş bir tekrar olmadığını gösterir.
+        """
+        import cv2
+        img = cv2.imread(self.img_path)
+        ayna = cv2.flip(img, 1)
+
+        acik = TurtleIdentificationModel(flip_tta=True)
+        a, b = acik.extract_features(img), acik.extract_features(ayna)
+        self.assertGreater(
+            float(np.dot(a, b)), 0.999,
+            'flip-TTA açıkken gömü aynalamaya duyarsız olmalıydı')
+
+        kapali = TurtleIdentificationModel(flip_tta=False)
+        c, d = kapali.extract_features(img), kapali.extract_features(ayna)
+        self.assertLess(
+            float(np.dot(c, d)), 0.999,
+            'TTA kapalıyken aynalama gömüyü değiştirmeliydi; test anlamsız')
+
+    def test_flip_tta_gomuyu_degistirir(self):
+        """Bayrak gerçekten farklı bir gömü üretiyor mu?
+
+        Üretiyorsa galeri ve sorgu AYNI ayarla üretilmek zorundadır; bu
+        yüzden `build_gallery.py` ayarı kaggle_db.meta.json'a yazıyor ve
+        `app.py` açılışta doğruluyor.
+        """
+        import cv2
+        img = cv2.imread(self.img_path)
+        a = TurtleIdentificationModel(flip_tta=True).extract_features(img)
+        b = TurtleIdentificationModel(flip_tta=False).extract_features(img)
+        self.assertLess(float(np.dot(a, b)), 0.9999)
+
+    def test_flip_tta_deterministik(self):
+        """İki ileri geçişin ortalaması da süreç içinde kararlı olmalı."""
+        import cv2
+        img = cv2.imread(self.img_path)
+        m = TurtleIdentificationModel(flip_tta=True)
+        np.testing.assert_allclose(m.extract_features(img),
+                                   m.extract_features(img),
+                                   rtol=1e-5, atol=1e-6)
+
+    def test_model_bilgisi_flip_tta_bildirir(self):
+        self.assertIs(TurtleIdentificationModel().get_model_info()['flip_tta'],
+                      True)
+
     def test_farkli_goruntu_farkli_gomu(self):
         """Model girdiye gerçekten bakıyor mu (sabit çıktı vermiyor mu)?"""
         import cv2

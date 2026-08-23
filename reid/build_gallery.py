@@ -25,10 +25,12 @@ Kullanim
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 from collections import defaultdict
+from datetime import datetime, timezone
 
 import cv2
 
@@ -37,6 +39,42 @@ AGENT = os.path.abspath(os.path.join(HERE, '..', 'image-analysis-agent'))
 sys.path.insert(0, AGENT)
 
 from src.models.turtle_model import TurtleIdentificationModel  # noqa: E402
+
+
+def dosya_sha256(yol, blok=1 << 20):
+    """Checkpoint parmak izi - galerinin hangi modelle uretildigini kaydeder."""
+    if not yol or not os.path.exists(yol):
+        return None
+    h = hashlib.sha256()
+    with open(yol, 'rb') as f:
+        for parca in iter(lambda: f.read(blok), b''):
+            h.update(parca)
+    return h.hexdigest()
+
+
+def meta_yaz(out, model, kayit_sayisi, birey_sayisi):
+    """Galerinin yanina uyum kaydi birak.
+
+    Gomu boyutu tek basina yetmiyor: flip-TTA acik/kapali ayni boyutu
+    uretir ama farkli vektorler verir (kosinus ~0.965). Model dosyasi ya da
+    cikarim ayari degistiginde galeri de yeniden gomulmeli; app.py acilista
+    bu dosyayi model bilgisiyle karsilastirip uyusmazsa 503 doner.
+    """
+    meta = {
+        'embedding_dim': model.embedding_dim,
+        'backbone': getattr(model, 'backbone_name', None),
+        'fine_tuned': model.fine_tuned,
+        'preprocess_profile': getattr(model, 'profile', 'full'),
+        'flip_tta': getattr(model, 'flip_tta', None),
+        'model_sha256': dosya_sha256(model.model_path),
+        'record_count': kayit_sayisi,
+        'identity_count': birey_sayisi,
+        'built_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+    }
+    yol = os.path.splitext(out)[0] + '.meta.json'
+    with open(yol, 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    return yol, meta
 
 
 def toplanan_fotograflar(images_root, per_identity):
@@ -78,7 +116,8 @@ def main():
     print(f'{len(secilen)} birey, {toplam} fotograf indekslenecek')
 
     model = TurtleIdentificationModel(model_path=args.model_path)
-    print(f'gomu boyutu: {model.embedding_dim} | fine_tuned: {model.fine_tuned}')
+    print(f'gomu boyutu: {model.embedding_dim} | fine_tuned: {model.fine_tuned} '
+          f'| flip_tta: {model.flip_tta}')
 
     db, hatali, islenen = {}, 0, 0
     for identity, yollar in secilen.items():
@@ -114,9 +153,12 @@ def main():
     with open(args.out, 'w', encoding='utf-8') as f:
         json.dump(db, f, ensure_ascii=False)
 
+    meta_yolu, meta = meta_yaz(args.out, model, len(db), len(secilen))
+
     print(f'-> {args.out}')
     print(f'   {len(db)} kayit yazildi, {hatali} okunamadi')
-    print(f'   gomu boyutu: {model.embedding_dim}')
+    print(f'   gomu boyutu: {model.embedding_dim} | flip_tta: {meta["flip_tta"]}')
+    print(f'-> {meta_yolu}')
 
 
 if __name__ == '__main__':

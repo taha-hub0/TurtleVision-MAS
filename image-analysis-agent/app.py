@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import base64
 import cv2
+import json
 import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
@@ -20,7 +21,7 @@ CORS(app)
 
 # Configuration
 PORT = int(os.getenv('PORT', 5000))
-MODEL_PATH = os.getenv('MODEL_PATH', './src/models/weights/best_model.pt')
+MODEL_PATH = os.getenv('MODEL_PATH', './src/models/weights/arcface_best.pt')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.85))
 
 # Initialize logger
@@ -75,6 +76,52 @@ def galeri_uyum_kontrolu():
             f'Cozum: dogru checkpoint icin `python reid/fetch_model.py`, '
             f'ya da galeriyi yeniden gomun: `python reid/build_gallery.py`.')
 
+    return galeri_ayar_kontrolu()
+
+
+def galeri_ayar_kontrolu():
+    """Galeri, su anki cikarim ayariyla mi uretilmis?
+
+    Boyut kontrolu yetmiyor: flip-TTA acik/kapali AYNI boyutta ama FARKLI
+    vektorler uretir (olculdu: kosinus 0.965). Galeri bir ayarla gomulup
+    sorgu digeriyle gelirse benzerlikler sessizce bozulur - hicbir hata
+    firlamaz, arayuzde de belli olmaz.
+
+    build_gallery.py galerinin yanina kaggle_db.meta.json birakir; burada
+    onu modelin su anki ayariyla karsilastiriyoruz.
+    """
+    meta_yolu = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'data', 'kaggle_seaturtle', 'kaggle_db.meta.json')
+    if not os.path.exists(meta_yolu):
+        # Eski galeriler bu dosyayi tasimiyor. Servisi durdurmuyoruz ama
+        # dogrulanmadigini soyluyoruz - sessizce gecmekten iyisi budur.
+        logger.warning('Galeri uyum kaydi yok (%s). Galerinin bu modelle '
+                       'uretildigi dogrulanamiyor; `python reid/build_gallery.py` '
+                       'ile yeniden gomup kaydi olusturun.', meta_yolu)
+        return True, None
+
+    try:
+        with open(meta_yolu, encoding='utf-8') as f:
+            meta = json.load(f)
+    except Exception as e:
+        logger.warning('Galeri uyum kaydi okunamadi: %s', e)
+        return True, None
+
+    farklar = []
+    for alan, simdiki in (('flip_tta', getattr(model, 'flip_tta', None)),
+                          ('preprocess_profile', getattr(model, 'profile', 'full')),
+                          ('backbone', getattr(model, 'backbone_name', None))):
+        beklenen = meta.get(alan)
+        if beklenen is not None and simdiki is not None and beklenen != simdiki:
+            farklar.append(f'{alan}: galeri={beklenen!r}, model={simdiki!r}')
+
+    if farklar:
+        return False, (
+            'Galeri farkli bir cikarim ayariyla uretilmis (' +
+            '; '.join(farklar) + '). Gomu boyutu ayni oldugu icin '
+            'karsilastirma calisiyor gorunur ama benzerlikler bozuk olur. '
+            'Cozum: `python reid/build_gallery.py --images-root <veri-seti>`.')
+
     return True, None
 
 
@@ -93,6 +140,7 @@ def health_check():
     if model is not None:
         payload['embedding_dim'] = getattr(model, 'embedding_dim', None)
         payload['fine_tuned'] = getattr(model, 'fine_tuned', None)
+        payload['flip_tta'] = getattr(model, 'flip_tta', None)
     if not uyumlu:
         payload['issue'] = sorun
 
@@ -472,7 +520,12 @@ def match_turtle():
         alternatives = []
         for alt in top_n_result['top_alternatives']:
             alternatives.append({
+                # turtle_id: bu bireyin sorguya en cok benzeyen KARESI.
+                # identity: bireyin kendisi - liste artik ayni bireyin
+                # tekrarlanan kareleri degil, N ayri aday iceriyor.
                 'turtle_id': alt['turtle_id'],
+                'identity': alt['identity'],
+                'frames': alt['frames'],
                 'species': alt['species'],
                 'similarity': alt['similarity'],
                 'url': f"http://localhost:5000/api/gallery/{alt['turtle_id']}.jpg"
@@ -485,6 +538,8 @@ def match_turtle():
             'classification': match_result.classification,
             'confidence': match_result.confidence,
             'matched_turtle_id': match_result.matched_turtle_id,
+            'matched_identity': match_result.matched_identity,
+            'supporting_frames': match_result.supporting_frames,
             'similarity_score': match_result.similarity_score,
             'top_alternatives': alternatives,
             'matching_method': match_result.matching_method,
@@ -662,12 +717,16 @@ def match_turtle_top_n():
                 'classification': main_result.classification,
                 'confidence': main_result.confidence,
                 'matched_turtle_id': main_result.matched_turtle_id,
+                'matched_identity': main_result.matched_identity,
+                'supporting_frames': main_result.supporting_frames,
                 'similarity_score': main_result.similarity_score,
                 'reasoning': main_result.reasoning,
             },
             'top_alternatives': [
                 {
                     'turtle_id': alt['turtle_id'],
+                    'identity': alt['identity'],
+                    'frames': alt['frames'],
                     'species': alt['species'],
                     'similarity': alt['similarity'],
                 }

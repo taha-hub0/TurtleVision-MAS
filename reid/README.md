@@ -72,9 +72,22 @@ konumuna indirir ve SHA256'sını doğrular. Checkpoint depoda tutulmuyor:
 olduğu için her iterasyon depoyu geri alınamaz biçimde büyütürdü.
 
 > **Model ile galeri birbirine bağlıdır.** `kaggle_db.json` içindeki gömüler
-> belirli bir modelle üretilmiştir. Model değişirse galeri de
-> `build_gallery.py` ile yeniden gömülmelidir; aksi halde boyutlar uyuşmaz ve
-> sistem **her fotoğrafa "yeni birey" der**. Bu durumda `/health` ucu
+> belirli bir modelle ve belirli bir çıkarım ayarıyla üretilmiştir. İkisinden
+> biri değişirse galeri `build_gallery.py` ile yeniden gömülmelidir.
+>
+> İki ayrı uyumsuzluk türü var ve ikincisi daha sinsi:
+>
+> - **Boyut uyuşmazlığı** (ör. checkpoint bulunamayıp ImageNet gövdesine
+>   düşülmesi): karşılaştırma 0,0 döner, sistem **her fotoğrafa "yeni birey"**
+>   der.
+> - **Ayar uyuşmazlığı** (ör. galeri flip-TTA ile, sorgu TTA'sız): boyut
+>   aynı kalır, karşılaştırma **çalışıyor görünür** ama benzerlikler bozulur.
+>   Ölçüldü: aynı fotoğrafın TTA'lı ve TTA'sız gömüsü arasında kosinüs
+>   **0,965** — 1,0 olması gerekirken.
+>
+> `build_gallery.py` galerinin yanına `kaggle_db.meta.json` bırakır (gömü
+> boyutu, gövde, ön işleme profili, `flip_tta`, checkpoint SHA256). `app.py`
+> açılışta bunu modelin o anki ayarıyla karşılaştırır; uyuşmazsa `/health`
 > `degraded` + HTTP 503 döner ve nedenini söyler.
 
 ### Sıfırdan eğitmek
@@ -161,6 +174,52 @@ galeride bulunmayan bir fotoğrafı, n=40):
 "Farklı gün" sahadaki gerçek senaryodur: sorgu, galeriyle aynı çekim
 seansından değildir.
 
+### Kimlik düzeyinde toplama + flip-TTA
+
+İki değişiklik modeli hiç yeniden eğitmeden eşleştirmeyi iyileştiriyor:
+
+- **Kimlik düzeyinde toplama.** Skor artık tekil kare değil birey başına
+  hesaplanıyor: `w · (en iyi karenin benzerliği) + (1−w) · (centroid
+  benzerliği)`, `w = 0,5`. Saf `max` aynı seanstan gelen sorguda üstün,
+  centroid gerçekten yeni bir günden gelen sorguda; karışım her ikisini de
+  taşıyor. `match_with_top_n` de artık **N ayrı birey** döndürüyor — eskiden
+  liste aynı bireyin tekrarlanan kareleriyle dolabiliyordu.
+- **Flip-TTA.** Gömü, görüntünün düz ve yatay çevrilmiş halinin
+  ortalamasıdır. Kaplumbağa kareye soldan da sağdan da girebildiği için bu,
+  gömüyü aynalamaya duyarsız hale getirir (`f(x) = f(ayna x)`, birebir).
+  Maliyet: kare başına iki ileri geçiş.
+
+Üretim kodu, tüm sorgu kümesi (n=428), galeri = birey başına 2 kare:
+
+| Senaryo | | önce | sonra | değişim |
+|---|---|---:|---:|---:|
+| Aynı gün (n=317) | top-1 | %82,6 | %83,3 | +0,6 |
+| | top-5 | %87,4 | %88,6 | +1,3 |
+| **Farklı gün (n=111)** | top-1 | %26,1 | %27,9 | +1,8 |
+| | **top-5** | **%33,3** | **%38,7** | **+5,4** |
+
+*önce* = TTA'sız gömü + kare düzeyinde saf `max`; *sonra* = flip-TTA +
+`w = 0,5`.
+
+Asıl kazanç **top-5**'te (+5,4 puan, göreli %16). Bu beklenen sonuç: iki
+değişiklik de modeli daha iyi öğretmiyor, sıralamayı gürültüye karşı
+sağlamlaştırıyor. top-1 farkları (+0,6 / +1,8) tek başına gürültüden
+ayrılamayacak kadar küçük — yönleri tutarlı ama n=111'de standart hata
+~4,3 puan.
+
+top-5'in artması operatör iş akışında doğrudan işe yarar: doğru birey
+listede olduğu sürece insan seçebilir.
+
+**Eşik hâlâ kalibre değil.** Ölçümde sorguların **%100'ü** "eşleşme bulundu"
+eşiğini geçti; farklı gün sorgularının %70'i yanlış bir bireyle eşleşip
+onaylandı. Sebep: kosinüs `[-1,1]` aralığından `[0,1]`'e haritalanıyor, yani
+%60 eşiği aslında **kosinüs ≥ 0,2** demek ve neredeyse her şeyi kabul ediyor.
+Bunu düzeltmek ayrı bir iş (doğrulama kümesinden ROC + üç bölgeli karar:
+*eşleşti* / *operatör onayına düşür* / *yeni birey*).
+
+Flip-TTA'yı kapatmak için `TURTLE_FLIP_TTA=0`; kapatırsanız galeriyi de aynı
+ayarla yeniden gömün.
+
 ### Bu sayıların söylediği
 
 `split_closed_random` (%71,28) ile `split_closed` (%10,75) arasındaki
@@ -184,5 +243,8 @@ sonraki adım.
 - **Tür sınıflandırıcı yok.** Veri seti tek türden (*Caretta caretta*)
   oluşuyor; ondan tür sınıflandırıcı öğrenilemez. Bu yüzden servis
   `species: null` döndürür, uydurma bir tür değil.
+- **Eşik kalibre edilmemiş.** %60'lık eşik, haritalama nedeniyle kosinüs
+  ≥ 0,2'ye denk geliyor ve pratikte her sorguyu kabul ediyor. Sistem şu an
+  "bilmiyorum" diyemiyor; yanlış birleştirme, kaçırılan eşleşmeden pahalıdır.
 - **CPU'da eğitildi.** `resnet18` @224 seçimi donanım kısıtından; GPU ile
   `resnet50` ve daha yüksek çözünürlük belirgin kazanç sağlar.

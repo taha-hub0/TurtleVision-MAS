@@ -48,7 +48,7 @@ services:
     environment:
       PORT: 5000
       DEBUG: 'False'
-      MODEL_PATH: ./src/models/weights/best_model.pt
+      MODEL_PATH: ./src/models/weights/arcface_best.pt
       CONFIDENCE_THRESHOLD: 0.85
     volumes:
       - ./image-analysis-agent:/app
